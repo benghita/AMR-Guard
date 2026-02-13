@@ -1,0 +1,28 @@
+[project]
+name = "Med-I-C"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "langgraph>=0.0.15",
+    "langchain>=0.3.0",
+    "langchain-text-splitters",
+    "langchain-google-vertexai",
+    "google-cloud-aiplatform",
+    "chromadb>=0.4.0",
+    "sentence-transformers",
+    "transformers>=4.50.0",
+    "torch",
+    "accelerate",
+    "bitsandbytes",
+    "streamlit",
+    "pillow",
+    "pydantic>=2.0",
+    "python-dotenv",
+    "openpyxl",
+    "requests",
+    "pypdf",
+    "langchain-community>=0.4.1",
+    "jq>=1.11.0",
+]
