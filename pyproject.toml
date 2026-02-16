@@ -1,7 +1,7 @@
 [project]
 name = "Med-I-C"
 version = "0.1.0"
-description = "Add your description here"
+description = "AMR-Guard: Infection Lifecycle Orchestrator Demo"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -25,4 +25,5 @@ dependencies = [
     "pypdf",
     "langchain-community>=0.4.1",
     "jq>=1.11.0",
+    "pandas>=2.0.0",
 ]
