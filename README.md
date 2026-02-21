@@ -1,56 +1,61 @@
-# Med-I-C — Infection Lifecycle Orchestrator
+# AMR-Guard: Infection Lifecycle Orchestrator
 
-**MedGemma Impact Challenge submission** | Deadline: Feb 24, 2026
+A multi-agent clinical decision-support system for antimicrobial stewardship, submitted to the **[MedGemma Impact Challenge](https://www.kaggle.com/competitions/med-gemma-impact-challenge)**.
 
-A multi-agent clinical decision-support system for antimicrobial stewardship, powered by MedGemma and TxGemma (HAI-DEF models).
+Powered by **MedGemma** (4B multimodal + 27B text) and **TxGemma** — HAI-DEF models from Google.
 
 ---
 
 ## What it does
 
-Med-I-C guides clinicians through two stages of infection management:
+AMR-Guard guides clinicians through two stages of infection management:
 
-- **Stage 1 — Empirical** (no lab results yet): Patient history → empirical antibiotic recommendation
-- **Stage 2 — Targeted** (lab results available): Lab report image/PDF (any language) → pathogen extraction → MIC trend analysis → targeted prescription
+**Stage 1 — Empirical** (no lab results yet)
+Patient history → risk factor analysis → empirical antibiotic recommendation
 
-Key capability: **MIC creep detection** — flags rising resistance trends before the lab formally reports "Resistant", giving clinicians a 6–18 month early-warning window.
+**Stage 2 — Targeted** (lab results available)
+Lab report image or PDF (any language) → pathogen & MIC extraction → resistance trend analysis → targeted prescription with drug interaction screening
 
----
-
-## Architecture
-
-```
-Patient Data ──▶ [Agent 1: Intake Historian]  ──▶ (no lab) ──▶ [Agent 4: Clinical Pharmacologist]
-                         │                                                     ▲
-                         └──▶ (lab uploaded) ──▶ [Agent 2: Vision Specialist]  │
-                                                          │                    │
-                                                 [Agent 3: Trend Analyst] ─────┘
-```
-
-| Agent | Model | Role |
-|-------|-------|------|
-| Intake Historian | MedGemma 4B IT | Parse EHR notes, calculate CrCl, identify MDR risk factors |
-| Vision Specialist | MedGemma 4B IT (multimodal) | Extract pathogen + MICs from lab images/PDFs in any language |
-| Trend Analyst | MedGemma 27B Text IT | Detect MIC creep, compute resistance velocity vs EUCAST breakpoints |
-| Clinical Pharmacologist | MedGemma 4B IT + TxGemma 9B | Select antibiotic, dose, check drug interactions, apply WHO AWaRe |
-
-**Orchestration:** LangGraph | **Knowledge base:** SQLite (EUCAST, WHO AWaRe, ATLAS, DDInter) + ChromaDB (IDSA guidelines, WHO GLASS) | **UI:** Streamlit
+A unique capability is **MIC creep detection**: the system flags when a pathogen's Minimum Inhibitory Concentration has risen ≥4-fold across admissions — even while the lab still reports "Susceptible" — giving clinicians a 6–18 month early warning before formal treatment failure.
 
 ---
 
-## Quick Start
+## Agent Pipeline
 
-### Prerequisites
+```
+Patient form ──► Agent 1: Intake Historian  ──► (no lab) ──────────────────► Agent 4: Clinical Pharmacologist ──► Prescription
+                       │                                                                  ▲
+                       └──► (lab uploaded) ──► Agent 2: Vision Specialist ──► Agent 3: Trend Analyst ──┘
+```
+
+| # | Agent | Model | Role |
+|---|-------|-------|------|
+| 1 | Intake Historian | MedGemma 4B IT | Parse EHR notes, calculate CrCl (Cockcroft-Gault), identify MDR risk factors |
+| 2 | Vision Specialist | MedGemma 4B IT (multimodal) | Extract pathogen names + MIC values from lab images / PDFs in **any language** |
+| 3 | Trend Analyst | MedGemma 27B Text IT | Detect MIC creep, compute resistance velocity against EUCAST v16.0 breakpoints |
+| 4 | Clinical Pharmacologist | MedGemma 4B IT + TxGemma 9B | Select antibiotic + dose, apply WHO AWaRe stewardship, screen drug interactions |
+
+**Orchestration:** LangGraph state machine with conditional routing
+**Knowledge base:** SQLite (EUCAST breakpoints, WHO AWaRe, ATLAS surveillance, DDInter interactions) + ChromaDB (IDSA guidelines, WHO GLASS — semantic RAG)
+
+---
+
+## Requirements
 
 - Python 3.11+
-- [`uv`](https://docs.astral.sh/uv/) for package management
-- HuggingFace account with MedGemma and TxGemma access granted
+- [`uv`](https://docs.astral.sh/uv/) for dependency management
+- HuggingFace account with access granted to:
+  - [MedGemma](https://huggingface.co/google/medgemma-4b-it)
+  - [TxGemma](https://huggingface.co/google/txgemma-2b-predict)
+- **For cloud deployment:** Google Cloud project with Vertex AI enabled
 
-### 1. Clone and install
+---
+
+## Setup
+
+### 1. Install dependencies
 
 ```bash
-git clone https://github.com/your-org/Med-I-C
-cd Med-I-C
 uv sync
 ```
 
@@ -58,85 +63,123 @@ uv sync
 
 ```bash
 cp .env.example .env
-# Edit .env — set HUGGINGFACE_TOKEN and choose backend (local or vertex)
 ```
 
-### 3. Build knowledge base
+Edit `.env`. Minimum required settings:
+
+```bash
+# Choose your backend
+MEDIC_DEFAULT_BACKEND=local        # local | vertex
+
+# Local model IDs (HuggingFace)
+MEDIC_LOCAL_MEDGEMMA_4B_MODEL=google/medgemma-4b-it
+MEDIC_LOCAL_MEDGEMMA_27B_MODEL=google/medgemma-4b-it   # use 4B as fallback if <24 GB VRAM
+MEDIC_LOCAL_TXGEMMA_9B_MODEL=google/txgemma-2b-predict
+MEDIC_LOCAL_TXGEMMA_2B_MODEL=google/txgemma-2b-predict
+```
+
+For Vertex AI instead:
+
+```bash
+MEDIC_DEFAULT_BACKEND=vertex
+MEDIC_USE_VERTEX=true
+MEDIC_VERTEX_PROJECT_ID=your-gcp-project-id
+MEDIC_VERTEX_LOCATION=us-central1
+```
+
+### 3. Authenticate with HuggingFace
+
+```bash
+uv run huggingface-cli login
+```
+
+### 4. Build the knowledge base
+
+Ingests EUCAST breakpoints, WHO AWaRe classification, IDSA guidelines, ATLAS surveillance data, and DDInter drug interactions into SQLite + ChromaDB:
 
 ```bash
 uv run python setup_demo.py
 ```
 
-This downloads and ingests all open-access data sources (EUCAST breakpoints, WHO AWaRe, IDSA guidelines, DDInter drug interactions) into SQLite and ChromaDB.
+This reads the source data files in `docs/` and writes to `data/` (gitignored, generated locally).
 
-### 4. Run the app
+### 5. Run the app
 
 ```bash
 uv run streamlit run app.py
 ```
 
+Open `http://localhost:8501` in your browser.
+
 ---
 
 ## Kaggle Reproduction
 
-Open `notebooks/kaggle_medic_demo.ipynb` in Kaggle:
+The full pipeline can be reproduced on a free Kaggle T4 GPU (16 GB VRAM):
 
-1. Add the `mghobashy/drug-drug-interactions` dataset
-2. Add your HuggingFace token as a Kaggle secret (`HF_TOKEN`)
-3. Run all cells — the notebook sets up the full environment and launches the app via a public tunnel
+1. Open [`notebooks/kaggle_medic_demo.ipynb`](notebooks/kaggle_medic_demo.ipynb) in Kaggle
+2. Add the `mghobashy/drug-drug-interactions` dataset to the notebook
+3. Add your HuggingFace token as a Kaggle secret named `HF_TOKEN`
+4. Run all cells — the notebook clones this repo, installs dependencies, builds the knowledge base, and launches the app via a public tunnel
 
-Tested on Kaggle T4 GPU (16 GB VRAM) using 4-bit quantization for MedGemma 4B and TxGemma 2B.
-
----
-
-## Data Sources (all open-access)
-
-| Source | Use |
-|--------|-----|
-| [EUCAST v16.0](https://www.eucast.org) | Clinical breakpoint tables for MIC interpretation |
-| [WHO AWaRe 2024](https://aware.essentialmeds.org) | Antibiotic stewardship classification |
-| [IDSA AMR Guidance 2024](https://www.idsociety.org/practice-guideline/amr-guidance/) | Treatment guidelines (RAG) |
-| [Pfizer ATLAS](https://atlas-surveillance.com) | 6.5M MIC surveillance measurements |
-| [WHO GLASS](https://worldhealthorg.shinyapps.io/glass-dashboard/) | 23M+ global AMR surveillance episodes |
-| [DDInter 2.0](https://ddinter2.scbdd.com) | 191,000+ drug-drug interactions |
-| [OpenFDA](https://api.fda.gov/drug/label.json) | Drug labeling and safety data |
+Models run with 4-bit quantization on T4 (MedGemma 4B + TxGemma 2B).
 
 ---
 
-## Model Licenses
+## Knowledge Base Sources
 
-You must accept the model licenses on HuggingFace before use:
-- MedGemma: https://huggingface.co/google/medgemma-4b-it
-- TxGemma: https://huggingface.co/google/txgemma-9b-predict
+All data is open-access — no registration required except where noted.
+
+| Source | Contents | Used for |
+|--------|----------|---------|
+| [EUCAST v16.0](https://www.eucast.org/bacteria/clinical-breakpoints-and-interpretation/) | Clinical breakpoint tables | MIC interpretation, creep detection |
+| [WHO AWaRe 2024](https://aware.essentialmeds.org) | Access / Watch / Reserve classification | Antibiotic stewardship |
+| [IDSA AMR Guidance 2024](https://www.idsociety.org/practice-guideline/amr-guidance/) | Treatment guidelines PDF | Empirical therapy RAG |
+| [Pfizer ATLAS](https://atlas-surveillance.com) *(free registration)* | 6.5M MIC surveillance measurements | Resistance patterns RAG |
+| [WHO GLASS](https://worldhealthorg.shinyapps.io/glass-dashboard/) | 23M+ AMR episodes, 141 countries | Global resistance context |
+| [DDInter 2.0](https://ddinter2.scbdd.com) | 191,000+ drug-drug interactions | Interaction screening |
+| [OpenFDA](https://api.fda.gov/drug/label.json) | Drug labeling / contraindications | Safety RAG |
 
 ---
 
 ## Project Structure
 
 ```
-Med-I-C/
-├── app.py                  # Streamlit UI
+medic-amr-guard/
+├── app.py                  # Streamlit UI (single-file, all four stages)
 ├── setup_demo.py           # One-command knowledge base setup
+├── pyproject.toml          # Dependencies (managed by uv)
+├── .env.example            # Environment variable template
+│
 ├── src/
-│   ├── agents.py           # 4 agent implementations
+│   ├── agents.py           # Four agent implementations
 │   ├── graph.py            # LangGraph orchestrator + conditional routing
-│   ├── loader.py           # Model loading (local / Vertex AI / 4-bit quant)
+│   ├── loader.py           # Model loading: local HuggingFace or Vertex AI
 │   ├── prompts.py          # System and user prompts for all agents
-│   ├── rag.py              # ChromaDB ingestion and retrieval
-│   ├── state.py            # InfectionState schema (TypedDict)
+│   ├── rag.py              # ChromaDB ingestion and retrieval helpers
+│   ├── state.py            # InfectionState TypedDict schema
 │   ├── utils.py            # CrCl calculator, MIC creep detection
-│   ├── config.py           # Pydantic settings
-│   ├── tools/              # Antibiotic, resistance, safety, RAG query tools
-│   └── db/                 # SQLite schema, import scripts, vector store
-├── docs/                   # Source data files (EUCAST xlsx, IDSA pdf, etc.)
+│   ├── config.py           # Pydantic settings (reads from .env)
+│   ├── tools/
+│   │   ├── antibiotic_tools.py   # WHO AWaRe lookups, MIC interpretation
+│   │   ├── resistance_tools.py   # Pathogen resistance pattern queries
+│   │   ├── safety_tools.py       # Drug interaction screening
+│   │   └── rag_tools.py          # Guideline retrieval wrappers
+│   └── db/
+│       ├── schema.sql            # SQLite table definitions
+│       ├── database.py           # Connection and query helpers
+│       ├── import_data.py        # ETL: Excel/CSV/PDF → SQLite
+│       └── vector_store.py       # ChromaDB ingestion
+│
+├── docs/                   # Source data files (committed — used by setup_demo.py)
+│   ├── antibiotic_guidelines/   # WHO AWaRe Excel exports, IDSA PDF
+│   ├── mic_breakpoints/         # EUCAST v16.0 breakpoint tables
+│   ├── pathogen_resistance/     # ATLAS susceptibility data
+│   └── drug_safety/             # DDInter drug interaction CSV
+│
 ├── notebooks/
-│   └── kaggle_medic_demo.ipynb
+│   └── kaggle_medic_demo.ipynb  # Full reproducible Kaggle notebook
+│
 └── tests/
-    └── test_pipeline.py
+    └── test_pipeline.py         # Agent and pipeline unit tests
 ```
-
----
-
-## Competition Writeup
-
-See [WRITEUP.md](WRITEUP.md) for the full 3-page submission document.
