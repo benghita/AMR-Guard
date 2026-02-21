@@ -2,3 +2,6 @@
 .env
 data/
 *.pyc
+__pycache__/
+.venv/
+*.egg-info/
