@@ -1,5 +1,5 @@
 """
-Med-I-C Multi-Agent System.
+Multi-Agent System.
 
 Implements the 4 specialized agents for the infection lifecycle workflow:
 - Agent 1: Intake Historian - Parse patient data, risk factors, calculate CrCl
