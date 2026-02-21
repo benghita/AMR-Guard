@@ -296,14 +296,66 @@ def import_mic_breakpoints() -> int:
     return len(records)
 
 
+KAGGLE_DATASET = "mghobashy/drug-drug-interactions"
+KAGGLE_INPUT_DIR = Path("/kaggle/input/drug-drug-interactions")
+INTERACTIONS_CSV = DOCS_DIR / "drug_safety" / "db_drug_interactions.csv"
+
+
+def _resolve_interactions_csv() -> Path | None:
+    """
+    Return the path to the drug interactions CSV, downloading it if needed.
+
+    Resolution order:
+    1. docs/drug_safety/db_drug_interactions.csv  (already present locally)
+    2. /kaggle/input/drug-drug-interactions/       (Kaggle notebook with dataset attached)
+    3. Kaggle API download                         (local dev with ~/.kaggle/kaggle.json)
+    """
+    # 1. Already present
+    if INTERACTIONS_CSV.exists():
+        return INTERACTIONS_CSV
+
+    # 2. Kaggle input mount (dataset added via Kaggle UI)
+    for candidate in KAGGLE_INPUT_DIR.glob("*.csv") if KAGGLE_INPUT_DIR.exists() else []:
+        print(f"  Found CSV in Kaggle input: {candidate}")
+        return candidate
+
+    # 3. Download via Kaggle API
+    print(f"  CSV not found — downloading from Kaggle dataset '{KAGGLE_DATASET}' ...")
+    try:
+        import kaggle  # noqa: F401 – triggers credential check
+        dest = INTERACTIONS_CSV.parent
+        dest.mkdir(parents=True, exist_ok=True)
+        import subprocess
+        result = subprocess.run(
+            ["kaggle", "datasets", "download", "-d", KAGGLE_DATASET,
+             "--unzip", "-p", str(dest)],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            # Find the downloaded CSV
+            for f in dest.glob("*.csv"):
+                print(f"  Downloaded: {f.name}")
+                return f
+        else:
+            print(f"  Kaggle download failed: {result.stderr.strip()}")
+    except ImportError:
+        print("  kaggle package not installed — run: uv add kaggle")
+    except Exception as e:
+        print(f"  Could not download: {e}")
+
+    return None
+
+
 def import_drug_interactions(limit: int = None) -> int:
-    """Import drug-drug interaction database."""
+    """Import drug-drug interaction database from Kaggle dataset mghobashy/drug-drug-interactions."""
     print("Importing drug interactions data...")
 
-    filepath = DOCS_DIR / "drug_safety" / "db_drug_interactions.csv"
+    filepath = _resolve_interactions_csv()
 
-    if not filepath.exists():
-        print(f"  Warning: {filepath} not found, skipping...")
+    if filepath is None:
+        print("  Skipping drug interactions — CSV unavailable.")
+        print(f"  To fix: attach the Kaggle dataset '{KAGGLE_DATASET}' to your notebook,")
+        print("  or set up ~/.kaggle/kaggle.json for API access.")
         return 0
 
     # Read CSV in chunks due to large size

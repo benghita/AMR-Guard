@@ -2,12 +2,18 @@
 """
 Setup script for Med-I-C Demo
 Initializes the database and imports all data.
+
+Drug interactions CSV is sourced from the Kaggle dataset:
+  https://www.kaggle.com/datasets/mghobashy/drug-drug-interactions
+
+On Kaggle: attach the dataset via "Add data" — it will be mounted automatically.
+Locally:   place ~/.kaggle/kaggle.json or run:
+             kaggle datasets download -d mghobashy/drug-drug-interactions --unzip -p docs/drug_safety/
 """
 
 import sys
 from pathlib import Path
 
-# Add project root to path
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -28,8 +34,8 @@ def main():
     # Limit interactions to 50k for faster demo setup
     structured_results = import_all_data(interactions_limit=50000)
 
-    # Step 2: Import PDFs into ChromaDB
-    print("\nStep 2: Importing PDFs into ChromaDB (Vector Store)...")
+    # Step 2: Import docs into ChromaDB
+    print("\nStep 2: Importing documents into ChromaDB (Vector Store)...")
     print("-" * 40)
 
     from src.db.vector_store import import_all_vectors
@@ -41,15 +47,23 @@ def main():
     print("Setup Complete!")
     print("=" * 60)
     print("\nData imported:")
-    print(f"  - EML Antibiotics: {structured_results.get('eml_antibiotics', 0)} records")
-    print(f"  - ATLAS Susceptibility: {structured_results.get('atlas_susceptibility', 0)} records")
-    print(f"  - MIC Breakpoints: {structured_results.get('mic_breakpoints', 0)} records")
-    print(f"  - Drug Interactions: {structured_results.get('drug_interactions', 0)} records")
-    print(f"  - IDSA Guidelines: {vector_results.get('idsa_guidelines', 0)} chunks")
-    print(f"  - MIC Reference: {vector_results.get('mic_reference', 0)} chunks")
+    print(f"  - EML Antibiotics:    {structured_results.get('eml_antibiotics', 0):>6} records")
+    print(f"  - ATLAS Susceptibility:{structured_results.get('atlas_susceptibility', 0):>5} records")
+    print(f"  - MIC Breakpoints:    {structured_results.get('mic_breakpoints', 0):>6} records")
+    print(f"  - Drug Interactions:  {structured_results.get('drug_interactions', 0):>6} records")
+    print(f"  - IDSA Guidelines:    {vector_results.get('idsa_guidelines', 0):>6} chunks")
+    print(f"  - MIC Reference:      {vector_results.get('mic_reference', 0):>6} chunks")
 
-    print("\nTo run the demo app:")
-    print("  uv run streamlit run app.py")
+    if structured_results.get('drug_interactions', 0) == 0:
+        print()
+        print("  ⚠  Drug interactions were not imported.")
+        print("     Dataset: https://www.kaggle.com/datasets/mghobashy/drug-drug-interactions")
+        print("     • On Kaggle: add the dataset via the notebook UI ('Add data').")
+        print("     • Locally:   kaggle datasets download -d mghobashy/drug-drug-interactions \\")
+        print("                    --unzip -p docs/drug_safety/")
+
+    print()
+    print("To run the app:  uv run streamlit run app.py")
     print()
 
 
