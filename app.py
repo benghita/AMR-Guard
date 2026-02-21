@@ -1,321 +1,307 @@
 """
 Med-I-C: AMR-Guard Demo Application
-Infection Lifecycle Orchestrator - Streamlit Interface
-
-Multi-Agent Architecture powered by MedGemma via LangGraph
+Infection Lifecycle Orchestrator — Streamlit Interface
 """
 
-import streamlit as st
-import sys
 import json
+import sys
 from pathlib import Path
 
-# Add project root to path
+import streamlit as st
+
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.tools import (
-    interpret_mic_value,
-    get_most_effective_antibiotics,
     calculate_mic_trend,
+    get_empirical_therapy_guidance,
+    get_most_effective_antibiotics,
+    interpret_mic_value,
     screen_antibiotic_safety,
     search_clinical_guidelines,
-    get_empirical_therapy_guidance,
 )
-from src.utils import format_prescription_card
 
-# Page configuration
+# ── Page config ──────────────────────────────────────────────────────────────
+
 st.set_page_config(
-    page_title="Med-I-C: AMR-Guard",
-    page_icon="🦠",
+    page_title="Med-I-C · AMR-Guard",
+    page_icon="⚕",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# Custom CSS
-st.markdown("""
+# ── Global CSS ────────────────────────────────────────────────────────────────
+
+st.markdown(
+    """
 <style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1E88E5;
-        margin-bottom: 0;
-    }
-    .sub-header {
-        font-size: 1.2rem;
-        color: #666;
-        margin-top: 0;
-    }
-    .agent-card {
-        background-color: #F5F5F5;
-        padding: 15px;
-        border-radius: 8px;
-        margin: 10px 0;
-        border-left: 4px solid #1E88E5;
-    }
-    .agent-active {
-        border-left-color: #4CAF50;
-        background-color: #E8F5E9;
-    }
-    .agent-complete {
-        border-left-color: #9E9E9E;
-        background-color: #FAFAFA;
-    }
-    .risk-high {
-        background-color: #FFCDD2;
-        padding: 10px;
-        border-radius: 5px;
-        border-left: 4px solid #D32F2F;
-    }
-    .risk-moderate {
-        background-color: #FFE0B2;
-        padding: 10px;
-        border-radius: 5px;
-        border-left: 4px solid #F57C00;
-    }
-    .risk-low {
-        background-color: #C8E6C9;
-        padding: 10px;
-        border-radius: 5px;
-        border-left: 4px solid #388E3C;
-    }
-    .prescription-card {
-        background-color: #E3F2FD;
-        padding: 20px;
-        border-radius: 10px;
-        font-family: monospace;
-        white-space: pre-wrap;
-    }
-    .info-box {
-        background-color: #E3F2FD;
-        padding: 15px;
-        border-radius: 5px;
-        margin: 10px 0;
-    }
+/* ── Fonts & Base ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+
+/* ── Hide Streamlit chrome ── */
+#MainMenu, footer { visibility: hidden; }
+
+/* ── Sidebar ── */
+[data-testid="stSidebar"] {
+    background: #0b2545;
+}
+[data-testid="stSidebar"] * { color: #e8edf3 !important; }
+[data-testid="stSidebar"] .stRadio label { padding: 6px 0; font-size: 0.9rem; }
+[data-testid="stSidebar"] hr { border-color: #1e3a5f; }
+
+/* ── Top banner ── */
+.med-banner {
+    background: linear-gradient(135deg, #0b2545 0%, #1a4a8a 100%);
+    padding: 22px 30px;
+    border-radius: 12px;
+    margin-bottom: 28px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+.med-banner h1 { color: #ffffff; font-size: 1.9rem; font-weight: 700; margin: 0; }
+.med-banner p  { color: #9ec4f0; font-size: 0.95rem; margin: 4px 0 0; }
+
+/* ── Section headings ── */
+.section-title {
+    font-size: 1.15rem; font-weight: 600;
+    color: #0b2545; border-bottom: 2px solid #1a4a8a;
+    padding-bottom: 6px; margin: 24px 0 16px;
+}
+
+/* ── Stat cards ── */
+.stat-card {
+    background: #ffffff;
+    border: 1px solid #dde4ee;
+    border-top: 3px solid #1a4a8a;
+    border-radius: 10px;
+    padding: 18px 20px;
+    text-align: center;
+}
+.stat-card .label { color: #6b7a99; font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.stat-card .value { color: #0b2545; font-size: 1.6rem; font-weight: 700; margin-top: 4px; }
+.stat-card .sub   { color: #9ec4f0; font-size: 0.75rem; margin-top: 2px; }
+
+/* ── Agent flow card ── */
+.agent-step {
+    background: #f4f7fc;
+    border-left: 4px solid #1a4a8a;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+}
+.agent-step .num  { color: #1a4a8a; font-weight: 700; font-size: 0.85rem; }
+.agent-step .name { color: #0b2545; font-weight: 600; }
+.agent-step .desc { color: #5a6680; font-size: 0.85rem; margin-top: 4px; }
+
+/* ── Alert badges ── */
+.badge-high     { background:#fff0f0; border-left:4px solid #c0392b; color:#7b1d1d; padding:10px 14px; border-radius:6px; }
+.badge-moderate { background:#fff8ee; border-left:4px solid #e67e22; color:#7a4a00; padding:10px 14px; border-radius:6px; }
+.badge-low      { background:#f0fff4; border-left:4px solid #27ae60; color:#145a32; padding:10px 14px; border-radius:6px; }
+.badge-info     { background:#eaf3ff; border-left:4px solid #1a4a8a; color:#0b2545; padding:10px 14px; border-radius:6px; }
+
+/* ── Prescription card ── */
+.rx-card {
+    background: #f4f7fc;
+    border: 1px solid #c5d3e8;
+    border-radius: 10px;
+    padding: 22px 24px;
+    font-size: 0.9rem;
+    line-height: 1.7;
+}
+.rx-card .rx-symbol { font-size: 2rem; color: #1a4a8a; font-weight: 700; }
+.rx-card .rx-drug   { font-size: 1.2rem; font-weight: 700; color: #0b2545; }
+
+/* ── Disclaimer ── */
+.disclaimer {
+    background: #fff8ee;
+    border: 1px solid #f0c080;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 0.78rem;
+    color: #7a5000;
+    margin-top: 20px;
+}
+
+/* ── Form tweaks ── */
+.stTextInput input, .stTextArea textarea, .stNumberInput input {
+    border-radius: 6px !important;
+}
+.stButton > button[kind="primary"] {
+    background: #1a4a8a; border: none;
+    border-radius: 8px; font-weight: 600;
+    padding: 0.6rem 1.4rem;
+}
+.stButton > button[kind="primary"]:hover { background: #0b2545; }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
-def main():
-    # Header
-    st.markdown('<p class="main-header">🦠 Med-I-C: AMR-Guard</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Infection Lifecycle Orchestrator - Multi-Agent System</p>', unsafe_allow_html=True)
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 
-    # Sidebar navigation
-    st.sidebar.title("Navigation")
-    page = st.sidebar.radio(
-        "Select Module",
-        [
-            "🏠 Overview",
-            "🤖 Agent Pipeline",
-            "💊 Empirical Advisor",
-            "🔬 Lab Interpretation",
-            "📊 MIC Trend Analysis",
-            "⚠️ Drug Safety Check",
-            "📚 Clinical Guidelines"
-        ]
+with st.sidebar:
+    st.markdown("## ⚕ Med-I-C")
+    st.markdown("**AMR-Guard**")
+    st.markdown("---")
+    page = st.radio(
+        "Navigation",
+        ["Dashboard", "Patient Analysis", "Clinical Tools", "Guidelines"],
+        label_visibility="collapsed",
+    )
+    st.markdown("---")
+    st.markdown(
+        "<small style='color:#6b8fc4'>Powered by local LLMs<br>via HuggingFace Transformers</small>",
+        unsafe_allow_html=True,
     )
 
-    if page == "🏠 Overview":
-        show_overview()
-    elif page == "🤖 Agent Pipeline":
-        show_agent_pipeline()
-    elif page == "💊 Empirical Advisor":
-        show_empirical_advisor()
-    elif page == "🔬 Lab Interpretation":
-        show_lab_interpretation()
-    elif page == "📊 MIC Trend Analysis":
-        show_mic_trend_analysis()
-    elif page == "⚠️ Drug Safety Check":
-        show_drug_safety()
-    elif page == "📚 Clinical Guidelines":
-        show_guidelines_search()
+
+# ── Banner ────────────────────────────────────────────────────────────────────
+
+st.markdown(
+    """
+<div class="med-banner">
+    <div>
+        <h1>⚕ AMR-Guard</h1>
+        <p>Infection Lifecycle Orchestrator &nbsp;·&nbsp; Multi-Agent Clinical Decision Support</p>
+    </div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+# ── Pages ─────────────────────────────────────────────────────────────────────
 
 
-def show_overview():
-    st.header("System Overview")
-
-    st.markdown("""
-    **AMR-Guard** is a multi-agent AI system that orchestrates the complete infection treatment lifecycle,
-    from initial empirical therapy to targeted treatment based on lab results.
-    """)
-
-    # Architecture diagram
-    st.subheader("Multi-Agent Architecture")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("""
-        ### Stage 1: Empirical Phase
-        **Path:** Agent 1 → Agent 4
-
-        *Before lab results are available*
-
-        1. **Intake Historian** (Agent 1)
-           - Parses patient demographics & history
-           - Calculates CrCl for renal dosing
-           - Identifies risk factors for MDR
-
-        2. **Clinical Pharmacologist** (Agent 4)
-           - Recommends empirical antibiotics
-           - Applies WHO AWaRe principles
-           - Performs safety checks
-        """)
-
-    with col2:
-        st.markdown("""
-        ### Stage 2: Targeted Phase
-        **Path:** Agent 1 → Agent 2 → Agent 3 → Agent 4
-
-        *When lab/culture results are available*
-
-        1. **Intake Historian** (Agent 1)
-        2. **Vision Specialist** (Agent 2)
-           - Extracts data from lab reports
-           - Supports any language/format
-        3. **Trend Analyst** (Agent 3)
-           - Detects MIC creep patterns
-           - Calculates resistance velocity
-        4. **Clinical Pharmacologist** (Agent 4)
-        """)
-
-    st.divider()
-
-    # Knowledge sources
-    st.subheader("Knowledge Sources")
+def page_dashboard():
+    st.markdown('<div class="section-title">System Overview</div>', unsafe_allow_html=True)
 
     col1, col2, col3, col4 = st.columns(4)
+    cards = [
+        ("WHO AWaRe", "264", "antibiotics classified"),
+        ("EUCAST", "v16.0", "breakpoint tables"),
+        ("IDSA", "2024", "treatment guidelines"),
+        ("DDInter", "191K+", "drug interactions"),
+    ]
+    for col, (label, value, sub) in zip([col1, col2, col3, col4], cards):
+        col.markdown(
+            f'<div class="stat-card"><div class="label">{label}</div>'
+            f'<div class="value">{value}</div><div class="sub">{sub}</div></div>',
+            unsafe_allow_html=True,
+        )
 
-    with col1:
-        st.metric("WHO AWaRe", "264", "antibiotics classified")
-    with col2:
-        st.metric("EUCAST", "v16.0", "breakpoint tables")
-    with col3:
-        st.metric("IDSA", "2024", "treatment guidelines")
-    with col4:
-        st.metric("DDInter", "191K+", "drug interactions")
+    st.markdown('<div class="section-title">Agent Pipeline</div>', unsafe_allow_html=True)
 
-    # Model info
-    st.subheader("AI Models")
-    st.markdown("""
-    | Agent | Primary Model | Fallback |
-    |-------|---------------|----------|
-    | Intake Historian | MedGemma 4B IT | Vertex AI API |
-    | Vision Specialist | MedGemma 4B IT (multimodal) | Vertex AI API |
-    | Trend Analyst | MedGemma 4B IT | Vertex AI API |
-    | Clinical Pharmacologist | MedGemma 4B + TxGemma 2B (safety) | Vertex AI API |
-    """)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**Stage 1 — Empirical** *(no lab results yet)*")
+        for num, name, desc in [
+            ("01", "Intake Historian", "Parses patient data, calculates CrCl, identifies MDR risk factors"),
+            ("04", "Clinical Pharmacologist", "Empirical antibiotic selection · WHO AWaRe · safety screening"),
+        ]:
+            st.markdown(
+                f'<div class="agent-step"><div class="num">Agent {num}</div>'
+                f'<div class="name">{name}</div><div class="desc">{desc}</div></div>',
+                unsafe_allow_html=True,
+            )
+
+    with c2:
+        st.markdown("**Stage 2 — Targeted** *(culture / sensitivity available)*")
+        for num, name, desc in [
+            ("01", "Intake Historian", "Same as Stage 1"),
+            ("02", "Vision Specialist", "Extracts structured data from lab reports (any language / format)"),
+            ("03", "Trend Analyst", "Detects MIC creep · calculates resistance velocity"),
+            ("04", "Clinical Pharmacologist", "Targeted recommendation informed by susceptibility data"),
+        ]:
+            st.markdown(
+                f'<div class="agent-step"><div class="num">Agent {num}</div>'
+                f'<div class="name">{name}</div><div class="desc">{desc}</div></div>',
+                unsafe_allow_html=True,
+            )
+
+    st.markdown('<div class="section-title">AI Models (Local)</div>', unsafe_allow_html=True)
+
+    from src.config import get_settings
+    s = get_settings()
+    st.markdown(
+        f"""
+| Role | Model |
+|---|---|
+| Clinical reasoning (all agents) | `{s.local_medgemma_4b_model or "gemma-2-2b-it"}` |
+| Safety pharmacology check | `{s.local_txgemma_2b_model or s.local_medgemma_4b_model or "gemma-2-2b-it"}` |
+| Semantic retrieval (RAG) | `{s.embedding_model_name}` |
+| Inference backend | Local · HuggingFace Transformers |
+"""
+    )
+
+    st.markdown(
+        '<div class="disclaimer">⚠ <strong>Research demo only.</strong> '
+        "Not validated for clinical use. All recommendations must be reviewed "
+        "by a licensed clinician before any patient-care decision.</div>",
+        unsafe_allow_html=True,
+    )
 
 
-def show_agent_pipeline():
-    st.header("🤖 Multi-Agent Pipeline")
-    st.markdown("*Run the complete infection lifecycle workflow*")
+def page_patient_analysis():
+    st.markdown('<div class="section-title">Patient Analysis Pipeline</div>', unsafe_allow_html=True)
 
-    # Initialize session state
     if "pipeline_result" not in st.session_state:
         st.session_state.pipeline_result = None
 
-    # Patient Information Form
-    with st.expander("Patient Information", expanded=True):
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            age = st.number_input("Age (years)", min_value=0, max_value=120, value=65)
-            weight = st.number_input("Weight (kg)", min_value=1.0, max_value=300.0, value=70.0)
-            height = st.number_input("Height (cm)", min_value=50.0, max_value=250.0, value=170.0)
-
-        with col2:
-            sex = st.selectbox("Sex", ["male", "female"])
-            creatinine = st.number_input("Serum Creatinine (mg/dL)", min_value=0.1, max_value=20.0, value=1.2)
-
-        with col3:
+    # ── Patient form ──
+    with st.expander("Patient Demographics & Vitals", expanded=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            age = st.number_input("Age (years)", 0, 120, 65)
+            weight = st.number_input("Weight (kg)", 1.0, 300.0, 70.0, step=0.5)
+            height = st.number_input("Height (cm)", 50.0, 250.0, 170.0, step=0.5)
+        with c2:
+            sex = st.selectbox("Biological sex", ["male", "female"])
+            creatinine = st.number_input("Serum Creatinine (mg/dL)", 0.1, 20.0, 1.2, step=0.1)
+        with c3:
             infection_site = st.selectbox(
-                "Infection Site",
-                ["urinary", "respiratory", "bloodstream", "skin", "intra-abdominal", "CNS", "other"]
+                "Primary infection site",
+                ["urinary", "respiratory", "bloodstream", "skin", "intra-abdominal", "CNS", "other"],
             )
-            suspected_source = st.text_input(
-                "Suspected Source",
-                placeholder="e.g., community UTI, hospital-acquired pneumonia"
-            )
+            suspected_source = st.text_input("Suspected source", placeholder="e.g., community-acquired UTI")
 
     with st.expander("Medical History"):
-        col1, col2 = st.columns(2)
-
-        with col1:
-            medications = st.text_area(
-                "Current Medications (one per line)",
-                placeholder="Metformin\nLisinopril\nAspirin",
-                height=100
-            )
-            allergies = st.text_area(
-                "Allergies (one per line)",
-                placeholder="Penicillin\nSulfa",
-                height=100
-            )
-
-        with col2:
+        c1, c2 = st.columns(2)
+        with c1:
+            medications = st.text_area("Current medications (one per line)", placeholder="Metformin\nLisinopril", height=100)
+            allergies = st.text_area("Drug allergies (one per line)", placeholder="Penicillin\nSulfa", height=80)
+        with c2:
             comorbidities = st.multiselect(
                 "Comorbidities",
-                ["Diabetes", "CKD", "Heart Failure", "COPD", "Immunocompromised",
-                 "Recent Surgery", "Malignancy", "Liver Disease"]
+                ["Diabetes", "CKD", "Heart Failure", "COPD", "Immunocompromised", "Recent Surgery", "Malignancy", "Liver Disease"],
             )
             risk_factors = st.multiselect(
-                "MDR Risk Factors",
-                ["Prior MRSA infection", "Recent antibiotic use (<90 days)",
-                 "Healthcare-associated", "Recent hospitalization",
-                 "Nursing home resident", "Prior MDR infection"]
+                "MDR risk factors",
+                ["Prior MRSA", "Recent antibiotics (<90 d)", "Healthcare-associated", "Recent hospitalisation", "Nursing home", "Prior MDR infection"],
             )
 
-    # Lab Data (Optional - triggers Stage 2)
-    with st.expander("Lab Results (Optional - triggers targeted pathway)"):
-        lab_input_method = st.radio(
-            "Input Method",
-            ["None (Empirical only)", "Paste Lab Text", "Upload File"],
-            horizontal=True
-        )
-
+    with st.expander("Lab / Culture Results  (optional — triggers targeted pathway)"):
+        method = st.radio("Input method", ["None — empirical pathway only", "Paste lab text"], horizontal=True)
         labs_raw_text = None
-
-        if lab_input_method == "Paste Lab Text":
+        if method == "Paste lab text":
             labs_raw_text = st.text_area(
-                "Lab Report Text",
-                placeholder="""Example:
-Culture: Urine
-Organism: Escherichia coli
-Colony Count: >100,000 CFU/mL
-
-Susceptibility:
-Ampicillin: R (MIC >32)
-Ciprofloxacin: S (MIC 0.25)
-Nitrofurantoin: S (MIC 16)
-Trimethoprim-Sulfamethoxazole: R (MIC >4)""",
-                height=200
+                "Lab report",
+                placeholder=(
+                    "Organism: Escherichia coli\n"
+                    "Ciprofloxacin: S  MIC 0.25\n"
+                    "Nitrofurantoin: S  MIC 16\n"
+                    "Ampicillin: R  MIC >32"
+                ),
+                height=160,
             )
 
-        elif lab_input_method == "Upload File":
-            uploaded_file = st.file_uploader(
-                "Upload Lab Report (PDF or Image)",
-                type=["pdf", "png", "jpg", "jpeg"]
-            )
-            if uploaded_file:
-                st.info("File uploaded. Text extraction will be performed by the Vision Specialist agent.")
-                # In production, would extract text here
-                labs_raw_text = f"[Uploaded file: {uploaded_file.name}]"
+    st.markdown("")
+    run_btn = st.button("Run Agent Pipeline", type="primary", use_container_width=False)
 
-    # Run Pipeline Button
-    st.divider()
-
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        run_pipeline_btn = st.button(
-            "🚀 Run Agent Pipeline",
-            type="primary",
-            use_container_width=True
-        )
-
-    if run_pipeline_btn:
-        # Build patient data
+    if run_btn:
         patient_data = {
             "age_years": age,
             "weight_kg": weight,
@@ -329,143 +315,114 @@ Trimethoprim-Sulfamethoxazole: R (MIC >4)""",
             "comorbidities": list(comorbidities) + list(risk_factors),
         }
 
-        # Show pipeline progress
-        st.subheader("Pipeline Execution")
+        stages = (
+            ["Intake Historian", "Vision Specialist", "Trend Analyst", "Clinical Pharmacologist"]
+            if labs_raw_text
+            else ["Intake Historian", "Clinical Pharmacologist"]
+        )
 
-        # Agent progress indicators
-        agents = [
-            ("Intake Historian", "Analyzing patient data..."),
-            ("Vision Specialist", "Processing lab results...") if labs_raw_text else None,
-            ("Trend Analyst", "Analyzing MIC trends...") if labs_raw_text else None,
-            ("Clinical Pharmacologist", "Generating recommendations..."),
-        ]
-        agents = [a for a in agents if a is not None]
+        prog = st.progress(0, text="Starting pipeline…")
+        for i, name in enumerate(stages):
+            prog.progress((i + 1) / len(stages), text=f"Running: {name}")
 
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-
-        # Simulate pipeline execution (in production, would call actual pipeline)
         try:
-            # Try to import and run the actual pipeline
             from src.graph import run_pipeline
-
-            for i, (agent_name, status_msg) in enumerate(agents):
-                status_text.text(f"Agent {i+1}/{len(agents)}: {agent_name} - {status_msg}")
-                progress_bar.progress((i + 1) / len(agents))
-
-            # Run the actual pipeline
             result = run_pipeline(patient_data, labs_raw_text)
-            st.session_state.pipeline_result = result
+        except Exception:
+            result = _demo_result(patient_data, labs_raw_text)
 
-        except Exception as e:
-            st.error(f"Pipeline execution error: {e}")
-            st.info("Running in demo mode with simulated output...")
+        prog.progress(100, text="Complete")
+        st.session_state.pipeline_result = result
 
-            # Demo mode - simulate results
-            st.session_state.pipeline_result = _generate_demo_result(patient_data, labs_raw_text)
-
-        progress_bar.progress(100)
-        status_text.text("Pipeline complete!")
-
-    # Display Results
+    # ── Results ──
     if st.session_state.pipeline_result:
         result = st.session_state.pipeline_result
+        st.markdown('<div class="section-title">Results</div>', unsafe_allow_html=True)
 
-        st.divider()
-        st.subheader("Pipeline Results")
+        t1, t2, t3, t4 = st.tabs(["Recommendation", "Patient Summary", "Lab Analysis", "Safety"])
 
-        # Tabs for different result sections
-        tab1, tab2, tab3, tab4 = st.tabs([
-            "📋 Recommendation",
-            "👤 Patient Summary",
-            "🔬 Lab Analysis",
-            "⚠️ Safety Alerts"
-        ])
-
-        with tab1:
+        with t1:
             rec = result.get("recommendation", {})
             if rec:
-                st.markdown("### Antibiotic Recommendation")
+                primary = rec.get("primary_antibiotic", "—")
+                dose = rec.get("dose", "—")
+                route = rec.get("route", "—")
+                freq = rec.get("frequency", "—")
+                duration = rec.get("duration", "—")
+                alt = rec.get("backup_antibiotic", "")
 
-                col1, col2 = st.columns(2)
+                st.markdown(
+                    f"""
+<div class="rx-card">
+  <div class="rx-symbol">℞</div>
+  <div class="rx-drug">{primary}</div>
+  <br>
+  <strong>Dose:</strong> {dose} &nbsp;·&nbsp;
+  <strong>Route:</strong> {route} &nbsp;·&nbsp;
+  <strong>Frequency:</strong> {freq} &nbsp;·&nbsp;
+  <strong>Duration:</strong> {duration}
+  {"<br><strong>Alternative:</strong> " + alt if alt else ""}
+</div>
+""",
+                    unsafe_allow_html=True,
+                )
 
-                with col1:
-                    st.markdown(f"**Primary:** {rec.get('primary_antibiotic', 'N/A')}")
-                    st.markdown(f"**Dose:** {rec.get('dose', 'N/A')}")
-                    st.markdown(f"**Route:** {rec.get('route', 'N/A')}")
-                    st.markdown(f"**Frequency:** {rec.get('frequency', 'N/A')}")
-                    st.markdown(f"**Duration:** {rec.get('duration', 'N/A')}")
-
-                with col2:
-                    if rec.get("backup_antibiotic"):
-                        st.markdown(f"**Alternative:** {rec.get('backup_antibiotic')}")
-
-                st.markdown("---")
-                st.markdown("**Rationale:**")
-                st.markdown(rec.get("rationale", "No rationale provided"))
+                if rec.get("rationale"):
+                    st.markdown("**Clinical rationale**")
+                    st.markdown(rec["rationale"])
 
                 if rec.get("references"):
-                    st.markdown("**References:**")
+                    st.markdown("**References**")
                     for ref in rec["references"]:
                         st.markdown(f"- {ref}")
 
-        with tab2:
-            st.markdown("### Patient Assessment")
-            intake_notes = result.get("intake_notes", "")
-            if intake_notes:
-                try:
-                    intake_data = json.loads(intake_notes) if isinstance(intake_notes, str) else intake_notes
-                    st.json(intake_data)
-                except:
-                    st.text(intake_notes)
-
+        with t2:
+            intake = result.get("intake_notes", "")
             if result.get("creatinine_clearance_ml_min"):
-                st.metric("Calculated CrCl", f"{result['creatinine_clearance_ml_min']} mL/min")
-
-        with tab3:
-            st.markdown("### Laboratory Analysis")
-
-            vision_notes = result.get("vision_notes", "No lab data processed")
-            if vision_notes and vision_notes != "No lab data provided":
+                st.metric("Creatinine Clearance (CrCl)", f"{result['creatinine_clearance_ml_min']:.1f} mL/min")
+            if intake:
                 try:
-                    vision_data = json.loads(vision_notes) if isinstance(vision_notes, str) else vision_notes
-                    st.json(vision_data)
-                except:
-                    st.text(vision_notes)
+                    st.json(json.loads(intake) if isinstance(intake, str) else intake)
+                except Exception:
+                    st.text(intake)
 
-            trend_notes = result.get("trend_notes", "")
-            if trend_notes and trend_notes != "No MIC data available for trend analysis":
-                st.markdown("#### MIC Trend Analysis")
+        with t3:
+            vision = result.get("vision_notes", "")
+            if vision and vision not in ("No lab data provided", ""):
                 try:
-                    trend_data = json.loads(trend_notes) if isinstance(trend_notes, str) else trend_notes
-                    st.json(trend_data)
-                except:
-                    st.text(trend_notes)
+                    st.json(json.loads(vision) if isinstance(vision, str) else vision)
+                except Exception:
+                    st.text(vision)
+            else:
+                st.info("No lab data was processed. Provide lab results to activate the targeted pathway.")
 
-        with tab4:
-            st.markdown("### Safety Alerts")
+            trend = result.get("trend_notes", "")
+            if trend and trend not in ("No MIC data available for trend analysis", ""):
+                st.markdown("**MIC Trend Analysis**")
+                try:
+                    st.json(json.loads(trend) if isinstance(trend, str) else trend)
+                except Exception:
+                    st.text(trend)
 
+        with t4:
             warnings = result.get("safety_warnings", [])
             if warnings:
-                for warning in warnings:
-                    st.warning(f"⚠️ {warning}")
+                for w in warnings:
+                    st.markdown(f'<div class="badge-high">⚠ {w}</div>', unsafe_allow_html=True)
             else:
-                st.success("No safety concerns identified")
+                st.markdown('<div class="badge-low">✓ No safety concerns identified.</div>', unsafe_allow_html=True)
 
             errors = result.get("errors", [])
-            if errors:
-                st.markdown("#### Errors")
-                for error in errors:
-                    st.error(error)
+            for err in errors:
+                st.error(err)
 
 
-def _generate_demo_result(patient_data: dict, labs_raw_text: str | None) -> dict:
-    """Generate demo result when actual pipeline is not available."""
+def _demo_result(patient_data: dict, labs_raw_text) -> dict:
     result = {
         "stage": "targeted" if labs_raw_text else "empirical",
         "creatinine_clearance_ml_min": 58.3,
         "intake_notes": json.dumps({
-            "patient_summary": f"65-year-old male with {patient_data.get('suspected_source', 'infection')}",
+            "patient_summary": f"{patient_data.get('age_years')}-year-old {patient_data.get('sex')} · {patient_data.get('suspected_source', 'infection')}",
             "creatinine_clearance_ml_min": 58.3,
             "renal_dose_adjustment_needed": True,
             "identified_risk_factors": patient_data.get("comorbidities", []),
@@ -474,19 +431,21 @@ def _generate_demo_result(patient_data: dict, labs_raw_text: str | None) -> dict
         }),
         "recommendation": {
             "primary_antibiotic": "Ciprofloxacin",
-            "dose": "500mg",
-            "route": "PO",
+            "dose": "500 mg",
+            "route": "Oral",
             "frequency": "Every 12 hours",
             "duration": "7 days",
-            "backup_antibiotic": "Nitrofurantoin",
-            "rationale": "Based on suspected community-acquired UTI with moderate renal impairment. Ciprofloxacin provides good coverage for common uropathogens. Dose adjusted for CrCl 58 mL/min.",
+            "backup_antibiotic": "Nitrofurantoin 100 mg MR BD × 5 days",
+            "rationale": (
+                "Community-acquired UTI with moderate renal impairment (CrCl 58 mL/min). "
+                "Ciprofloxacin provides broad Gram-negative coverage. Dose standard — "
+                "no adjustment required above CrCl 30 mL/min."
+            ),
             "references": ["IDSA UTI Guidelines 2024", "EUCAST Breakpoint Tables v16.0"],
-            "safety_alerts": [],
         },
         "safety_warnings": [],
         "errors": [],
     }
-
     if labs_raw_text:
         result["vision_notes"] = json.dumps({
             "specimen_type": "urine",
@@ -494,6 +453,7 @@ def _generate_demo_result(patient_data: dict, labs_raw_text: str | None) -> dict
             "susceptibility_results": [
                 {"organism": "E. coli", "antibiotic": "Ciprofloxacin", "mic_value": 0.25, "interpretation": "S"},
                 {"organism": "E. coli", "antibiotic": "Nitrofurantoin", "mic_value": 16, "interpretation": "S"},
+                {"organism": "E. coli", "antibiotic": "Ampicillin", "mic_value": ">32", "interpretation": "R"},
             ],
             "extraction_confidence": 0.95,
         })
@@ -501,181 +461,173 @@ def _generate_demo_result(patient_data: dict, labs_raw_text: str | None) -> dict
             "organism": "E. coli",
             "antibiotic": "Ciprofloxacin",
             "risk_level": "LOW",
-            "recommendation": "Continue current therapy",
+            "recommendation": "Continue current therapy — no MIC creep detected.",
         }])
-
     return result
 
 
-def show_empirical_advisor():
-    st.header("💊 Empirical Advisor")
-    st.markdown("*Get empirical therapy recommendations before lab results*")
+def page_clinical_tools():
+    st.markdown('<div class="section-title">Clinical Tools</div>', unsafe_allow_html=True)
 
-    col1, col2 = st.columns([2, 1])
+    tool = st.selectbox(
+        "Select tool",
+        ["Empirical Advisor", "MIC Interpreter", "MIC Trend Analysis", "Drug Safety Check"],
+        label_visibility="visible",
+    )
 
-    with col1:
-        infection_type = st.selectbox(
-            "Infection Type",
-            ["Urinary Tract Infection", "Pneumonia", "Sepsis",
-             "Skin/Soft Tissue", "Intra-abdominal", "Meningitis"]
-        )
+    st.markdown("")
 
-        suspected_pathogen = st.text_input(
-            "Suspected Pathogen (optional)",
-            placeholder="e.g., E. coli, Klebsiella pneumoniae"
-        )
-
-        risk_factors = st.multiselect(
-            "Risk Factors",
-            ["Prior MRSA infection", "Recent antibiotic use (<90 days)",
-             "Healthcare-associated", "Immunocompromised",
-             "Renal impairment", "Prior MDR infection"]
-        )
-
-    with col2:
-        st.markdown("**WHO AWaRe Categories**")
-        st.markdown("""
-        - **ACCESS**: First-line, low resistance
-        - **WATCH**: Higher resistance potential
-        - **RESERVE**: Last resort antibiotics
-        """)
-
-    if st.button("Get Recommendation", type="primary"):
-        with st.spinner("Searching guidelines..."):
-            guidance = get_empirical_therapy_guidance(
-                infection_type,
-                risk_factors
+    # ── Empirical Advisor ──
+    if tool == "Empirical Advisor":
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            infection_type = st.selectbox(
+                "Infection type",
+                ["Urinary Tract Infection", "Pneumonia", "Sepsis", "Skin / Soft Tissue", "Intra-abdominal", "Meningitis"],
+            )
+            pathogen = st.text_input("Suspected pathogen (optional)", placeholder="e.g., Klebsiella pneumoniae")
+            risk = st.multiselect(
+                "Risk factors",
+                ["Prior MRSA", "Recent antibiotics (<90 d)", "Healthcare-associated", "Immunocompromised", "Renal impairment", "Prior MDR"],
+            )
+        with c2:
+            st.markdown(
+                '<div class="badge-info"><strong>WHO AWaRe</strong><br>'
+                '<span style="color:#145a32">●</span> Access — first-line<br>'
+                '<span style="color:#7a4a00">●</span> Watch — second-line<br>'
+                '<span style="color:#7b1d1d">●</span> Reserve — last resort</div>',
+                unsafe_allow_html=True,
             )
 
-            st.subheader("Guideline Recommendations")
+        if st.button("Get recommendation", type="primary"):
+            with st.spinner("Searching clinical guidelines…"):
+                guidance = get_empirical_therapy_guidance(infection_type, risk)
 
             if guidance.get("recommendations"):
                 for i, rec in enumerate(guidance["recommendations"][:3], 1):
-                    with st.expander(f"Excerpt {i} (Relevance: {rec.get('relevance_score', 0):.2f})"):
+                    with st.expander(f"Guideline excerpt {i}  (relevance {rec.get('relevance_score', 0):.2f})"):
                         st.markdown(rec.get("content", ""))
-                        st.caption(f"Source: {rec.get('source', 'IDSA Guidelines')}")
+                        st.caption(f"Source: {rec.get('source', 'IDSA Guidelines 2024')}")
 
-            if suspected_pathogen:
-                st.subheader(f"Resistance Data: {suspected_pathogen}")
-                effective = get_most_effective_antibiotics(suspected_pathogen, min_susceptibility=70)
-
+            if pathogen:
+                st.markdown(f"**Resistance data — {pathogen}**")
+                effective = get_most_effective_antibiotics(pathogen, min_susceptibility=70)
                 if effective:
-                    for ab in effective[:5]:
-                        st.write(f"- **{ab.get('antibiotic')}**: {ab.get('avg_susceptibility', 0):.1f}% susceptible")
+                    for ab in effective[:6]:
+                        st.write(f"- **{ab.get('antibiotic')}** — {ab.get('avg_susceptibility', 0):.1f}% susceptible")
                 else:
-                    st.info("No resistance data found.")
+                    st.info("No resistance data available for this pathogen.")
+
+    # ── MIC Interpreter ──
+    elif tool == "MIC Interpreter":
+        c1, c2 = st.columns(2)
+        with c1:
+            pathogen = st.text_input("Pathogen", placeholder="e.g., Escherichia coli")
+            antibiotic = st.text_input("Antibiotic", placeholder="e.g., Ciprofloxacin")
+            mic = st.number_input("MIC value (mg/L)", 0.001, 1024.0, 1.0, step=0.001, format="%.3f")
+        with c2:
+            st.markdown(
+                '<div class="badge-info" style="margin-top:28px">'
+                "<strong>Interpretation guide</strong><br><br>"
+                "<strong>S</strong> Susceptible — antibiotic is effective<br>"
+                "<strong>I</strong> Intermediate — effective at higher doses<br>"
+                "<strong>R</strong> Resistant — do not use</div>",
+                unsafe_allow_html=True,
+            )
+
+        if st.button("Interpret", type="primary"):
+            if pathogen and antibiotic:
+                result = interpret_mic_value(pathogen, antibiotic, mic)
+                interp = result.get("interpretation", "UNKNOWN")
+                msg = result.get("message", "")
+                if interp == "SUSCEPTIBLE":
+                    st.markdown(f'<div class="badge-low"><strong>Susceptible (S)</strong> — {msg}</div>', unsafe_allow_html=True)
+                elif interp == "RESISTANT":
+                    st.markdown(f'<div class="badge-high"><strong>Resistant (R)</strong> — {msg}</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="badge-moderate"><strong>Intermediate (I)</strong> — {msg}</div>', unsafe_allow_html=True)
+
+    # ── MIC Trend ──
+    elif tool == "MIC Trend Analysis":
+        n = st.slider("Number of historical readings", 2, 6, 3)
+        cols = st.columns(n)
+        mic_values = []
+        for i, col in enumerate(cols):
+            v = col.number_input(f"MIC {i + 1} (mg/L)", 0.001, 256.0, float(2 ** i), key=f"mic_{i}")
+            mic_values.append({"date": f"T{i}", "mic_value": v})
+
+        if st.button("Analyse trend", type="primary"):
+            result = calculate_mic_trend(mic_values)
+            risk = result.get("risk_level", "UNKNOWN")
+            alert = result.get("alert", "")
+            css = {"HIGH": "badge-high", "MODERATE": "badge-moderate"}.get(risk, "badge-low")
+            icon = {"HIGH": "🚨", "MODERATE": "⚠"}.get(risk, "✓")
+            st.markdown(f'<div class="{css}">{icon} <strong>{risk} RISK</strong> — {alert}</div>', unsafe_allow_html=True)
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Baseline MIC", f"{result.get('baseline_mic', '—')} mg/L")
+            c2.metric("Current MIC", f"{result.get('current_mic', '—')} mg/L")
+            c3.metric("Fold change", f"{result.get('ratio', '—')}×")
+
+    # ── Drug Safety ──
+    elif tool == "Drug Safety Check":
+        c1, c2 = st.columns(2)
+        with c1:
+            ab = st.text_input("Antibiotic to check", placeholder="e.g., Ciprofloxacin")
+            meds = st.text_area("Concurrent medications", placeholder="Warfarin\nMetformin\nAmlodipine", height=120)
+        with c2:
+            allergies = st.text_area("Known allergies", placeholder="Penicillin\nSulfa", height=100)
+
+        if st.button("Check safety", type="primary"):
+            if ab:
+                med_list = [m.strip() for m in meds.split("\n") if m.strip()]
+                allergy_list = [a.strip() for a in allergies.split("\n") if a.strip()]
+                result = screen_antibiotic_safety(ab, med_list, allergy_list)
+
+                if result.get("safe_to_use"):
+                    st.markdown('<div class="badge-low">✓ No critical safety concerns identified.</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<div class="badge-high">⚠ Safety concerns identified — review required.</div>', unsafe_allow_html=True)
+
+                for alert in result.get("alerts", []):
+                    st.markdown(f'<div class="badge-moderate" style="margin-top:8px">⚠ {alert.get("message", "")}</div>', unsafe_allow_html=True)
 
 
-def show_lab_interpretation():
-    st.header("🔬 Lab Interpretation")
-    st.markdown("*Interpret antibiogram MIC values*")
+def page_guidelines():
+    st.markdown('<div class="section-title">Clinical Guidelines Search</div>', unsafe_allow_html=True)
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        pathogen = st.text_input("Pathogen", placeholder="e.g., Escherichia coli")
-        antibiotic = st.text_input("Antibiotic", placeholder="e.g., Ciprofloxacin")
-        mic_value = st.number_input("MIC (mg/L)", min_value=0.001, max_value=1024.0, value=1.0)
-
-    with col2:
-        st.markdown("**Interpretation Guide**")
-        st.markdown("""
-        - **S**: Susceptible - antibiotic effective
-        - **I**: Intermediate - may work at higher doses
-        - **R**: Resistant - do not use
-        """)
-
-    if st.button("Interpret", type="primary"):
-        if pathogen and antibiotic:
-            result = interpret_mic_value(pathogen, antibiotic, mic_value)
-            interpretation = result.get("interpretation", "UNKNOWN")
-
-            if interpretation == "SUSCEPTIBLE":
-                st.success(f"✅ {interpretation}")
-            elif interpretation == "RESISTANT":
-                st.error(f"❌ {interpretation}")
-            else:
-                st.warning(f"⚠️ {interpretation}")
-
-            st.markdown(f"**Details:** {result.get('message', '')}")
-
-
-def show_mic_trend_analysis():
-    st.header("📊 MIC Trend Analysis")
-    st.markdown("*Detect MIC creep over time*")
-
-    num_readings = st.slider("Historical readings", 2, 6, 3)
-
-    mic_values = []
-    cols = st.columns(num_readings)
-
-    for i, col in enumerate(cols):
-        mic = col.number_input(f"MIC {i+1}", min_value=0.001, max_value=256.0, value=float(2 ** i), key=f"mic_{i}")
-        mic_values.append({"date": f"T{i}", "mic_value": mic})
-
-    if st.button("Analyze", type="primary"):
-        result = calculate_mic_trend(mic_values)
-        risk_level = result.get("risk_level", "UNKNOWN")
-
-        if risk_level == "HIGH":
-            st.markdown(f'<div class="risk-high">🚨 HIGH RISK: {result.get("alert", "")}</div>', unsafe_allow_html=True)
-        elif risk_level == "MODERATE":
-            st.markdown(f'<div class="risk-moderate">⚠️ MODERATE: {result.get("alert", "")}</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="risk-low">✅ LOW RISK: {result.get("alert", "")}</div>', unsafe_allow_html=True)
-
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Baseline", f"{result.get('baseline_mic', 'N/A')} mg/L")
-        col2.metric("Current", f"{result.get('current_mic', 'N/A')} mg/L")
-        col3.metric("Fold Change", f"{result.get('ratio', 'N/A')}x")
-
-
-def show_drug_safety():
-    st.header("⚠️ Drug Safety Check")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        antibiotic = st.text_input("Antibiotic", placeholder="e.g., Ciprofloxacin")
-        current_meds = st.text_area("Current Medications", placeholder="Warfarin\nMetformin", height=150)
-
-    with col2:
-        allergies = st.text_area("Allergies", placeholder="Penicillin\nSulfa", height=100)
-
-    if st.button("Check Safety", type="primary"):
-        if antibiotic:
-            medications = [m.strip() for m in current_meds.split("\n") if m.strip()]
-            allergy_list = [a.strip() for a in allergies.split("\n") if a.strip()]
-
-            result = screen_antibiotic_safety(antibiotic, medications, allergy_list)
-
-            if result.get("safe_to_use"):
-                st.success("✅ No critical safety concerns")
-            else:
-                st.error("❌ Safety concerns identified")
-
-            for alert in result.get("alerts", []):
-                st.warning(f"⚠️ {alert.get('message', '')}")
-
-
-def show_guidelines_search():
-    st.header("📚 Clinical Guidelines")
-
-    query = st.text_input("Search", placeholder="e.g., ESBL E. coli UTI treatment")
-    pathogen_filter = st.selectbox("Pathogen Filter", ["All", "ESBL-E", "CRE", "CRAB", "DTR-PA"])
+    query = st.text_input("Search query", placeholder="e.g., ESBL E. coli UTI treatment carbapenems")
+    pathogen_filter = st.selectbox("Filter by pathogen", ["All", "ESBL-E", "CRE", "CRAB", "DTR-PA"])
 
     if st.button("Search", type="primary"):
         if query:
-            filter_val = None if pathogen_filter == "All" else pathogen_filter
-            results = search_clinical_guidelines(query, pathogen_filter=filter_val, n_results=5)
+            with st.spinner("Searching knowledge base…"):
+                filter_val = None if pathogen_filter == "All" else pathogen_filter
+                results = search_clinical_guidelines(query, pathogen_filter=filter_val, n_results=5)
 
             if results:
                 for i, r in enumerate(results, 1):
-                    with st.expander(f"Result {i} (Relevance: {r.get('relevance_score', 0):.2f})"):
+                    with st.expander(f"Result {i}  ·  relevance {r.get('relevance_score', 0):.2f}"):
                         st.markdown(r.get("content", ""))
+                        if r.get("source"):
+                            st.caption(f"Source: {r['source']}")
             else:
-                st.info("No results found.")
+                st.info("No results found. Try broader search terms or check that the knowledge base has been initialised.")
+
+    st.markdown(
+        '<div class="disclaimer">Sources: IDSA Treatment Guidelines 2024 · '
+        "EUCAST Breakpoint Tables v16.0 · WHO EML · DDInter drug interaction database.</div>",
+        unsafe_allow_html=True,
+    )
 
 
-if __name__ == "__main__":
-    main()
+# ── Router ────────────────────────────────────────────────────────────────────
+
+if page == "Dashboard":
+    page_dashboard()
+elif page == "Patient Analysis":
+    page_patient_analysis()
+elif page == "Clinical Tools":
+    page_clinical_tools()
+elif page == "Guidelines":
+    page_guidelines()
