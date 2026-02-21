@@ -67,7 +67,7 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 /* ── Section headings ── */
 .section-title {
     font-size: 1.15rem; font-weight: 600;
-    color: #0b2545; border-bottom: 2px solid #1a4a8a;
+    color: #6b8fc4; border-bottom: 2px solid #1a4a8a;
     padding-bottom: 6px; margin: 24px 0 16px;
 }
 
@@ -228,12 +228,13 @@ def page_dashboard():
     s = get_settings()
     st.markdown(
         f"""
-| Role | Model |
-|---|---|
-| Clinical reasoning (all agents) | `{s.local_medgemma_4b_model or "gemma-2-2b-it"}` |
-| Safety pharmacology check | `{s.local_txgemma_2b_model or s.local_medgemma_4b_model or "gemma-2-2b-it"}` |
-| Semantic retrieval (RAG) | `{s.embedding_model_name}` |
-| Inference backend | Local · HuggingFace Transformers |
+| Agent | Role | Model |
+|---|---|---|
+| 1, 2, 4 | Clinical reasoning | `{s.local_medgemma_4b_model or "google/medgemma-4b-it"}` |
+| 3 | Trend analysis | `{s.local_medgemma_27b_model or "google/medgemma-27b-text-it"}` |
+| 4 (safety) | Pharmacology check | `{s.local_txgemma_9b_model or "google/txgemma-9b-predict"}` |
+| — | Semantic retrieval (RAG) | `{s.embedding_model_name}` |
+| — | Inference backend | Local · HuggingFace Transformers · {s.quantization} quant |
 """
     )
 
@@ -243,6 +244,125 @@ def page_dashboard():
         "by a licensed clinician before any patient-care decision.</div>",
         unsafe_allow_html=True,
     )
+
+
+def _parse_notes(raw) -> dict | list | None:
+    """Parse a notes field that may be a JSON string, dict, or list."""
+    if not raw or raw in ("No lab data provided", "No MIC data available for trend analysis", ""):
+        return None
+    if isinstance(raw, (dict, list)):
+        return raw
+    try:
+        return json.loads(raw)
+    except Exception:
+        return None
+
+
+def _render_intake_tab(result: dict):
+    intake = _parse_notes(result.get("intake_notes", ""))
+    crcl = result.get("creatinine_clearance_ml_min")
+
+    if isinstance(intake, dict):
+        # Metrics row
+        cols = st.columns(3)
+        if crcl or intake.get("creatinine_clearance_ml_min"):
+            val = crcl or intake.get("creatinine_clearance_ml_min", 0)
+            cols[0].metric("CrCl", f"{val:.1f} mL/min")
+        if intake.get("infection_severity"):
+            cols[1].metric("Severity", intake["infection_severity"].capitalize())
+        if intake.get("recommended_stage"):
+            cols[2].metric("Pathway", intake["recommended_stage"].capitalize())
+
+        if intake.get("patient_summary"):
+            st.markdown(f'<div class="badge-info">{intake["patient_summary"]}</div>', unsafe_allow_html=True)
+
+        if intake.get("renal_dose_adjustment_needed"):
+            st.markdown(
+                '<div class="badge-moderate" style="margin-top:8px">⚠ Renal dose adjustment required</div>',
+                unsafe_allow_html=True,
+            )
+
+        if intake.get("identified_risk_factors"):
+            st.markdown("**Identified risk factors**")
+            for rf in intake["identified_risk_factors"]:
+                st.markdown(f"- {rf}")
+    elif intake:
+        st.text(str(intake))
+    else:
+        if crcl:
+            st.metric("CrCl", f"{crcl:.1f} mL/min")
+        st.info("Intake summary not available.")
+
+
+def _render_lab_tab(result: dict):
+    vision = _parse_notes(result.get("vision_notes", ""))
+    trend = _parse_notes(result.get("trend_notes", ""))
+
+    if vision is None:
+        st.info("No lab data was processed. Provide lab results to activate the targeted pathway.")
+    else:
+        v = vision if isinstance(vision, dict) else {}
+        if v.get("specimen_type"):
+            st.markdown(f"**Specimen:** {v['specimen_type'].capitalize()}")
+
+        if v.get("extraction_confidence") is not None:
+            conf = float(v["extraction_confidence"])
+            color = "#27ae60" if conf >= 0.85 else "#e67e22" if conf >= 0.6 else "#c0392b"
+            st.markdown(
+                f'<div class="badge-info">Extraction confidence: '
+                f'<span style="color:{color};font-weight:700">{conf:.0%}</span></div>',
+                unsafe_allow_html=True,
+            )
+
+        orgs = v.get("identified_organisms", [])
+        if orgs:
+            st.markdown("**Identified organisms**")
+            for o in orgs:
+                name = o.get("organism_name", "Unknown")
+                sig = o.get("significance", "")
+                st.markdown(f"- **{name}**" + (f" — {sig}" if sig else ""))
+
+        sus = v.get("susceptibility_results", [])
+        if sus:
+            st.markdown("**Susceptibility results**")
+            rows = []
+            for entry in sus:
+                interp = entry.get("interpretation", "")
+                color = {"S": "#145a32", "R": "#7b1d1d", "I": "#7a4a00"}.get(interp.upper(), "#333")
+                rows.append({
+                    "Organism": entry.get("organism", ""),
+                    "Antibiotic": entry.get("antibiotic", ""),
+                    "MIC (mg/L)": entry.get("mic_value", ""),
+                    "Result": interp,
+                })
+            import pandas as pd
+            st.dataframe(
+                pd.DataFrame(rows),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    # MIC Trend section
+    if trend:
+        st.markdown("---")
+        st.markdown("**MIC Trend Analysis**")
+        items = trend if isinstance(trend, list) else [trend]
+        for item in items:
+            if not isinstance(item, dict):
+                st.text(str(item))
+                continue
+            risk = item.get("risk_level", "UNKNOWN").upper()
+            css = {"HIGH": "badge-high", "MODERATE": "badge-moderate"}.get(risk, "badge-low")
+            icon = {"HIGH": "🚨", "MODERATE": "⚠"}.get(risk, "✓")
+            org = item.get("organism", "")
+            ab = item.get("antibiotic", "")
+            label = f"{org} / {ab} — " if (org or ab) else ""
+            st.markdown(
+                f'<div class="{css}" style="margin-bottom:6px">'
+                f'{icon} <strong>{label}{risk}</strong><br>'
+                f'<span style="font-size:0.88rem">{item.get("recommendation", "")}</span></div>',
+                unsafe_allow_html=True,
+            )
 
 
 def page_patient_analysis():
@@ -377,32 +497,10 @@ def page_patient_analysis():
                         st.markdown(f"- {ref}")
 
         with t2:
-            intake = result.get("intake_notes", "")
-            if result.get("creatinine_clearance_ml_min"):
-                st.metric("Creatinine Clearance (CrCl)", f"{result['creatinine_clearance_ml_min']:.1f} mL/min")
-            if intake:
-                try:
-                    st.json(json.loads(intake) if isinstance(intake, str) else intake)
-                except Exception:
-                    st.text(intake)
+            _render_intake_tab(result)
 
         with t3:
-            vision = result.get("vision_notes", "")
-            if vision and vision not in ("No lab data provided", ""):
-                try:
-                    st.json(json.loads(vision) if isinstance(vision, str) else vision)
-                except Exception:
-                    st.text(vision)
-            else:
-                st.info("No lab data was processed. Provide lab results to activate the targeted pathway.")
-
-            trend = result.get("trend_notes", "")
-            if trend and trend not in ("No MIC data available for trend analysis", ""):
-                st.markdown("**MIC Trend Analysis**")
-                try:
-                    st.json(json.loads(trend) if isinstance(trend, str) else trend)
-                except Exception:
-                    st.text(trend)
+            _render_lab_tab(result)
 
         with t4:
             warnings = result.get("safety_warnings", [])
