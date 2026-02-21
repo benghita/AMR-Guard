@@ -12,7 +12,7 @@ def ingest_medical_data():
     # Persistent client for the competition (Kaggle/Local)
     client = chromadb.PersistentClient(path=CHROMA_PATH)
     
-    # Using the embedding model you specified
+    # Define the embedding model
     model_name = "all-MiniLM-L6-v2"
     ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=model_name)
 
