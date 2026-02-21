@@ -5,3 +5,10 @@ data/
 __pycache__/
 .venv/
 *.egg-info/
+
+# Private planning documents
+PLAN.md
+The-MedGemma-Impact-Challenge.txt
+
+# Large data files — fetched at setup time by setup_demo.py
+docs/drug_safety/db_drug_interactions.csv

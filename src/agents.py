@@ -307,7 +307,7 @@ def run_trend_analyst(state: InfectionState) -> InfectionState:
         try:
             response = run_inference(
                 prompt=prompt,
-                model_name="medgemma_4b",
+                model_name="medgemma_27b",  # Agent 3: MedGemma 27B per PLAN.md (env maps to 4B on limited GPU)
                 max_new_tokens=1024,
                 temperature=0.2,
             )
@@ -523,7 +523,7 @@ def _run_txgemma_safety_check(
 
         response = run_inference(
             prompt=prompt,
-            model_name="txgemma_2b",  # Use smaller TxGemma for safety check
+            model_name="txgemma_9b",  # Agent 4 safety: TxGemma 9B per PLAN.md (env maps to 2B on limited GPU)
             max_new_tokens=256,
             temperature=0.1,
         )
