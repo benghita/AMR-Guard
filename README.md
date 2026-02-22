@@ -90,12 +90,12 @@ Patient form ──► Agent 1: Intake Historian  ──► (no lab) ───�
 
 Go to [huggingface.co/new-space](https://huggingface.co/new-space) and select:
 - SDK: **Streamlit**
-- Hardware: **T4 (GPU)** (free tier, limited quota) or **A10G** (paid ~$0.60/hr)
+- Hardware: **T4 (GPU)** (free tier, limited quota) or **A10G**
 
 **2. Push this repository**
 
 ```bash
-git remote add space https://huggingface.co/spaces/<your-username>/amr-guard
+git remote set-url space https://huggingface.co/spaces/<your-username>/amr-guard 2>/dev/null || git remote add space https://huggingface.co/spaces/<your-username>/amr-guard
 git push space master
 ```
 
