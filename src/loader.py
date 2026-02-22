@@ -1,9 +1,20 @@
 
 import logging
+import os
 from functools import lru_cache
 from typing import Any, Callable, Dict, Literal, Optional
 
 from .config import get_settings
+
+# ── ZeroGPU decorator (HF Spaces only) ────────────────────────────────────────
+if os.environ.get("SPACE_ID"):
+    try:
+        import spaces as _spaces
+        _gpu = _spaces.GPU
+    except ImportError:
+        _gpu = lambda f: f  # noqa: E731
+else:
+    _gpu = lambda f: f  # noqa: E731
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +159,7 @@ def get_text_model(
     return _get_local_causal_lm(model_name)
 
 
+@_gpu
 def run_inference(
     prompt: str,
     model_name: TextModelName = "medgemma_4b",
@@ -168,6 +180,7 @@ def run_inference(
         raise
 
 
+@_gpu
 def run_inference_with_image(
     prompt: str,
     image: Any,  # PIL.Image.Image

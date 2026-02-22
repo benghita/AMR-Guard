@@ -3,9 +3,8 @@ title: AMR-Guard
 emoji: ⚕️
 colorFrom: blue
 colorTo: indigo
-sdk: streamlit
-sdk_version: "1.45.0"
-app_file: app.py
+sdk: gradio
+sdk_version: "5.0.0"
 pinned: true
 license: apache-2.0
 tags:
