@@ -16,7 +16,7 @@ tags:
   - streamlit
   - llm
   - medgemma
-short_description: Multi-agent clinical decision support for antimicrobial stewardship
+short_description: Multi-agent clinical support for antimicrobial stewardship
 ---
 
 # AMR-Guard: Infection Lifecycle Orchestrator
