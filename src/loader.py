@@ -33,7 +33,8 @@ def _get_local_causal_lm(model_name: TextModelName):
 
     load_kwargs: Dict[str, Any] = {"device_map": "auto"}
     if settings.quantization == "4bit":
-        load_kwargs["load_in_4bit"] = True
+        from transformers import BitsAndBytesConfig
+        load_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
 
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     model = AutoModelForCausalLM.from_pretrained(model_path, **load_kwargs)
