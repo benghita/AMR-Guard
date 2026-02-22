@@ -45,6 +45,34 @@ if os.environ.get("SPACE_ID") and not _DB_PATH.exists():
 import gradio as gr
 import pandas as pd
 
+# ── Gradio 5.0.0 boolean-schema patch ────────────────────────────────────────
+# gradio 5.0.0 walks JSON Schemas and does `if "const" in schema:` without
+# guarding against boolean schemas (valid in JSON Schema spec but not a dict).
+# Patch every reachable schema-walking helper to skip non-dict schemas.
+try:
+    import gradio.utils as _gr_utils
+    _orig_get_type = getattr(_gr_utils, "get_type", None)
+    if _orig_get_type:
+        def _safe_get_type(schema, *a, **kw):
+            if not isinstance(schema, dict):
+                return "other"
+            return _orig_get_type(schema, *a, **kw)
+        _gr_utils.get_type = _safe_get_type
+except Exception:
+    pass
+try:
+    import gradio.route_utils as _gr_ru
+    for _fn_name in ("get_type", "_json_schema_to_python_type", "json_schema_to_python_type"):
+        _fn = getattr(_gr_ru, _fn_name, None)
+        if _fn:
+            def _safe_fn(schema, *a, _f=_fn, **kw):
+                if not isinstance(schema, dict):
+                    return "other"
+                return _f(schema, *a, **kw)
+            setattr(_gr_ru, _fn_name, _safe_fn)
+except Exception:
+    pass
+
 from src.config import get_settings
 from src.form_config import CREATININE_PROMINENT_SITES, SITE_SPECIFIC_FIELDS, SUSPECTED_SOURCE_OPTIONS
 from src.loader import run_inference  # noqa: F401 – registers @spaces.GPU with ZeroGPU at startup
