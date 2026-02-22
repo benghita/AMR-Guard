@@ -4,13 +4,22 @@ Infection Lifecycle Orchestrator — Streamlit Interface
 """
 
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
-import streamlit as st
-
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+# ── HuggingFace Spaces: auto-build knowledge base on first boot ───────────
+# SPACE_ID is injected by the HF runtime. setup_demo.py is fast (no ML model
+# downloads — it only imports structured data into SQLite and ChromaDB).
+_DB_PATH = PROJECT_ROOT / os.getenv("MEDIC_DATA_DIR", "data") / "amr_guard.db"
+if os.environ.get("SPACE_ID") and not _DB_PATH.exists():
+    subprocess.run([sys.executable, str(PROJECT_ROOT / "setup_demo.py")], check=False)
+
+import streamlit as st
 
 from src.form_config import CREATININE_PROMINENT_SITES, SITE_SPECIFIC_FIELDS, SUSPECTED_SOURCE_OPTIONS
 from src.tools import (
