@@ -91,16 +91,26 @@ def run_pipeline(patient_data: dict, labs_raw_text: str | None = None) -> Infect
         "country_or_region": patient_data.get("country_or_region"),
         "vitals": patient_data.get("vitals", {}),
         "stage": "targeted" if labs_raw_text else "empirical",
+        "errors": [],
+        "safety_warnings": [],
     }
 
     if labs_raw_text:
         initial_state["labs_raw_text"] = labs_raw_text
 
     logger.info(f"Starting pipeline (stage: {initial_state['stage']})")
-    compiled = build_infection_graph().compile()
-    final_state = compiled.invoke(initial_state)
-    logger.info("Pipeline complete")
-    return final_state
+    logger.info(f"Patient: {patient_data.get('age_years')}y, {patient_data.get('sex')}, infection: {patient_data.get('infection_site')}")
+    
+    try:
+        compiled = build_infection_graph().compile()
+        logger.info("Graph compiled successfully")
+        final_state = compiled.invoke(initial_state)
+        logger.info("Pipeline complete")
+        return final_state
+    except Exception as e:
+        logger.error(f"Pipeline execution failed: {e}", exc_info=True)
+        initial_state["errors"].append(f"Pipeline error: {str(e)}")
+        return initial_state
 
 
 def run_empirical_pipeline(patient_data: dict) -> InfectionState:
