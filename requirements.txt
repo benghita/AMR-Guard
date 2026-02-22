@@ -16,7 +16,7 @@ langchain-community>=0.4.1
 
 # ── Knowledge base ─────────────────────────────────────────────────────────
 chromadb>=0.4.0
-sentence-transformers
+sentence-transformers>=3.0.0
 
 # ── App & data ─────────────────────────────────────────────────────────────
 gradio>=5.0
