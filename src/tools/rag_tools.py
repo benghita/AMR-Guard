@@ -1,6 +1,5 @@
 """RAG tools for querying clinical guidelines via ChromaDB."""
 
-from typing import Optional
 from src.db.vector_store import search_guidelines, search_mic_reference
 
 

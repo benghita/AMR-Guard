@@ -1,18 +1,7 @@
-"""
-Prompt templates for Med-I-C multi-agent system.
+"""Prompt templates for each agent in the Med-I-C pipeline."""
 
-Each agent has a specific role in the infection lifecycle workflow:
-- Agent 1: Intake Historian - Parse patient data, risk factors, calculate CrCl
-- Agent 2: Vision Specialist - Extract structured data from lab reports (images/PDFs)
-- Agent 3: Trend Analyst - Detect MIC creep and resistance velocity
-- Agent 4: Clinical Pharmacologist - Final Rx recommendations + safety checks
-"""
 
-from __future__ import annotations
-
-# =============================================================================
-# AGENT 1: INTAKE HISTORIAN
-# =============================================================================
+# --- Agent 1: Intake Historian ---
 
 INTAKE_HISTORIAN_SYSTEM = """You are an expert clinical intake specialist. Your role is to:
 
@@ -66,9 +55,7 @@ RAG CONTEXT (Relevant Guidelines):
 Provide your structured assessment following the system instructions."""
 
 
-# =============================================================================
-# AGENT 2: VISION SPECIALIST
-# =============================================================================
+# --- Agent 2: Vision Specialist ---
 
 VISION_SPECIALIST_SYSTEM = """You are an expert medical laboratory data extraction specialist. Your role is to:
 
@@ -131,9 +118,7 @@ Flag any critical findings that require urgent attention.
 Provide your structured extraction following the system instructions."""
 
 
-# =============================================================================
-# AGENT 3: TREND ANALYST
-# =============================================================================
+# --- Agent 3: Trend Analyst ---
 
 TREND_ANALYST_SYSTEM = """You are an expert antimicrobial resistance trend analyst. Your role is to:
 
@@ -195,9 +180,7 @@ Analyze the trend, calculate risk level, and provide recommendations.
 Follow the system instructions for output format."""
 
 
-# =============================================================================
-# AGENT 4: CLINICAL PHARMACOLOGIST
-# =============================================================================
+# --- Agent 4: Clinical Pharmacologist ---
 
 CLINICAL_PHARMACOLOGIST_SYSTEM = """You are an expert clinical pharmacologist specializing in infectious diseases and antimicrobial stewardship. Your role is to:
 
@@ -291,9 +274,7 @@ Provide your final recommendation following the system instructions.
 Ensure all safety checks are performed and documented."""
 
 
-# =============================================================================
-# TXGEMMA SAFETY CHECKER (Supplementary)
-# =============================================================================
+# --- TxGemma safety check (supplementary, not primary decision-making) ---
 
 TXGEMMA_SAFETY_PROMPT = """Evaluate the safety profile of the following antibiotic prescription:
 
@@ -315,9 +296,7 @@ Evaluate for:
 Provide a brief safety assessment (2-3 sentences) and a risk rating (LOW/MODERATE/HIGH)."""
 
 
-# =============================================================================
-# HELPER TEMPLATES
-# =============================================================================
+# --- Fallback templates ---
 
 ERROR_RECOVERY_PROMPT = """The previous agent encountered an error or produced invalid output.
 
@@ -338,18 +317,3 @@ CLINICAL SCENARIO:
 - Local resistance patterns: {local_resistance}
 
 Recommend appropriate empirical therapy following WHO AWaRe principles."""
-
-
-__all__ = [
-    "INTAKE_HISTORIAN_SYSTEM",
-    "INTAKE_HISTORIAN_PROMPT",
-    "VISION_SPECIALIST_SYSTEM",
-    "VISION_SPECIALIST_PROMPT",
-    "TREND_ANALYST_SYSTEM",
-    "TREND_ANALYST_PROMPT",
-    "CLINICAL_PHARMACOLOGIST_SYSTEM",
-    "CLINICAL_PHARMACOLOGIST_PROMPT",
-    "TXGEMMA_SAFETY_PROMPT",
-    "ERROR_RECOVERY_PROMPT",
-    "FALLBACK_EMPIRICAL_PROMPT",
-]
