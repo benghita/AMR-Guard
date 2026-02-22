@@ -47,6 +47,7 @@ import pandas as pd
 
 from src.config import get_settings
 from src.form_config import CREATININE_PROMINENT_SITES, SITE_SPECIFIC_FIELDS, SUSPECTED_SOURCE_OPTIONS
+from src.loader import run_inference  # noqa: F401 – registers @spaces.GPU with ZeroGPU at startup
 from src.tools import (
     calculate_mic_trend,
     get_empirical_therapy_guidance,
