@@ -105,18 +105,31 @@ def search_drug_safety(
     n_results: int = 5,
     drug_name: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """Search the drug safety collection (interactions, warnings, contraindications)."""
-    collection = get_collection("drug_safety")
-    if collection is None:
+    """Search drug interactions from SQLite (drug_interactions table)."""
+    if not drug_name:
         return []
-    enhanced_query = f"{drug_name} {query}" if drug_name else query
     try:
-        results = collection.query(
-            query_texts=[enhanced_query],
-            n_results=n_results,
-            include=["documents", "metadatas", "distances"],
+        from .db.database import execute_query
+
+        rows = execute_query(
+            """SELECT drug_1, drug_2, interaction_description, severity
+               FROM drug_interactions
+               WHERE LOWER(drug_1) LIKE ? OR LOWER(drug_2) LIKE ?
+               LIMIT ?""",
+            (f"%{drug_name.lower()}%", f"%{drug_name.lower()}%", n_results),
         )
-        return _format_results(results)
+        return [
+            {
+                "content": (
+                    f"{r['drug_1']} + {r['drug_2']}: {r['interaction_description']}"
+                ),
+                "metadata": {"severity": r.get("severity", "unknown")},
+                "distance": None,
+                "source": "drug_interactions (SQLite)",
+                "relevance_score": 1.0,
+            }
+            for r in rows
+        ]
     except Exception as e:
         logger.error(f"Error querying drug safety: {e}")
         return []

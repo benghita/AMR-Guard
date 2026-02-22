@@ -9,17 +9,18 @@ import hashlib
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
+from ..config import get_settings
+
 # Project paths
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-DATA_DIR = PROJECT_ROOT / "data"
 DOCS_DIR = PROJECT_ROOT / "docs"
-CHROMA_DIR = DATA_DIR / "chroma"
 
 
 def get_chroma_client() -> chromadb.PersistentClient:
     """Get ChromaDB persistent client."""
-    CHROMA_DIR.mkdir(parents=True, exist_ok=True)
-    return chromadb.PersistentClient(path=str(CHROMA_DIR))
+    chroma_dir = get_settings().chroma_db_dir
+    chroma_dir.mkdir(parents=True, exist_ok=True)
+    return chromadb.PersistentClient(path=str(chroma_dir))
 
 
 def get_embedding_function():
