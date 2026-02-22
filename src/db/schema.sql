@@ -1,4 +1,4 @@
--- Med-I-C Database Schema
+-- AMR-Guard Database Schema
 -- AMR-Guard: Infection Lifecycle Orchestrator
 
 -- EML Antibiotic Classification Table

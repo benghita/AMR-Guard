@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Setup script for Med-I-C Demo
+Setup script for AMR-Guard Demo
 Initializes the database and imports all data.
 
 Drug interactions CSV is sourced from the Kaggle dataset:
@@ -20,7 +20,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 def main():
     print("=" * 60)
-    print("Med-I-C Demo Setup")
+    print("AMR-Guard Demo Setup")
     print("AMR-Guard: Infection Lifecycle Orchestrator")
     print("=" * 60)
     print()

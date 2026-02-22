@@ -1,5 +1,5 @@
 """
-RAG module for Med-I-C.
+RAG module for AMR-Guard.
 
 Retrieves context from four ChromaDB collections:
 - idsa_treatment_guidelines: IDSA 2024 AMR guidance

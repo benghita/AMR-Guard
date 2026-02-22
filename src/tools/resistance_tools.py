@@ -1,4 +1,4 @@
-"""Resistance pattern and trend analysis tools for Med-I-C workflow."""
+"""Resistance pattern and trend analysis tools for AMR-Guard workflow."""
 
 from typing import Optional
 from src.db.database import execute_query

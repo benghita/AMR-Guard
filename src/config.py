@@ -12,7 +12,7 @@ load_dotenv()
 
 class Settings(BaseModel):
     """
-    All configuration for Med-I-C, read from environment variables.
+    All configuration for AMR-Guard, read from environment variables.
 
     Supports three deployment targets via MEDIC_ENV: local, kaggle, production.
     Backend selection (vertex or local) is controlled by MEDIC_DEFAULT_BACKEND.
@@ -32,7 +32,7 @@ class Settings(BaseModel):
     )
 
     default_backend: Literal["vertex", "local"] = Field(
-        default_factory=lambda: os.getenv("MEDIC_DEFAULT_BACKEND", "vertex")  # type: ignore[arg-type]
+        default_factory=lambda: os.getenv("MEDIC_DEFAULT_BACKEND", "local")  # type: ignore[arg-type]
     )
     # 4-bit quantization via bitsandbytes (local backend only)
     quantization: Literal["none", "4bit"] = Field(

@@ -6,7 +6,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # 1. Setup Chroma Persistence
 CHROMA_PATH = "data/chroma_db"
-DATA_PATH = "data/Med-I-C/raw"
+DATA_PATH = "data/AMR-Guard/raw"
 
 def ingest_medical_data():
     # Persistent client for the competition (Kaggle/Local)

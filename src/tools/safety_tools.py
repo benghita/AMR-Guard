@@ -1,4 +1,4 @@
-"""Drug safety and interaction tools for Med-I-C workflow."""
+"""Drug safety and interaction tools for AMR-Guard workflow."""
 
 from typing import Optional
 from src.db.database import execute_query

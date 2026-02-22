@@ -1,4 +1,4 @@
-"""Antibiotic query tools for Med-I-C workflow."""
+"""Antibiotic query tools for AMR-Guard workflow."""
 
 from typing import Optional
 from src.db.database import execute_query

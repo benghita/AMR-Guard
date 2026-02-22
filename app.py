@@ -1,5 +1,5 @@
 """
-Med-I-C: AMR-Guard Demo Application
+AMR-Guard: AMR-Guard Demo Application
 Infection Lifecycle Orchestrator — Streamlit Interface
 """
 
@@ -24,7 +24,7 @@ from src.tools import (
 # ── Page config ──────────────────────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="Med-I-C · AMR-Guard",
+    page_title="AMR-Guard · AMR-Guard",
     page_icon="⚕",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -144,7 +144,7 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    st.markdown("## ⚕ Med-I-C")
+    st.markdown("## ⚕ AMR-Guard")
     st.markdown("**AMR-Guard**")
     st.markdown("---")
     page = st.radio(

@@ -1,4 +1,4 @@
-"""Database modules for Med-I-C."""
+"""Database modules for AMR-Guard."""
 
 from .database import (
     init_database,
