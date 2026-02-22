@@ -49,6 +49,9 @@ CLINICAL CONTEXT:
 - Suspected infection site: {infection_site}
 - Suspected source: {suspected_source}
 
+SITE-SPECIFIC ASSESSMENT:
+{site_vitals}
+
 RAG CONTEXT (Relevant Guidelines):
 {rag_context}
 
@@ -266,6 +269,9 @@ INFECTION CONTEXT:
 - Site: {infection_site}
 - Source: {suspected_source}
 - Severity: {severity}
+
+SITE-SPECIFIC ASSESSMENT:
+{site_vitals}
 
 RAG CONTEXT (Guidelines & Safety Data):
 {rag_context}

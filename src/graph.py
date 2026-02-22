@@ -77,6 +77,9 @@ def run_pipeline(patient_data: dict, labs_raw_text: str | None = None) -> Infect
     Pass labs_raw_text to trigger the targeted (Stage 2) pathway.
     Without it, only the empirical (Stage 1) pathway runs.
     """
+    labs_image_bytes: bytes | None = patient_data.get("labs_image_bytes")
+    has_lab_input = bool(labs_raw_text or labs_image_bytes)
+
     initial_state: InfectionState = {
         "age_years": patient_data.get("age_years"),
         "weight_kg": patient_data.get("weight_kg"),
@@ -90,15 +93,17 @@ def run_pipeline(patient_data: dict, labs_raw_text: str | None = None) -> Infect
         "suspected_source": patient_data.get("suspected_source"),
         "country_or_region": patient_data.get("country_or_region"),
         "vitals": patient_data.get("vitals", {}),
-        "stage": "targeted" if labs_raw_text else "empirical",
+        "stage": "targeted" if has_lab_input else "empirical",
         "errors": [],
         "safety_warnings": [],
     }
 
     if labs_raw_text:
         initial_state["labs_raw_text"] = labs_raw_text
+    if labs_image_bytes:
+        initial_state["labs_image_bytes"] = labs_image_bytes
 
-    logger.info(f"Starting pipeline (stage: {initial_state['stage']})")
+    logger.info(f"Starting pipeline (stage: {initial_state['stage']}, lab_text={bool(labs_raw_text)}, lab_image={bool(labs_image_bytes)})")
     logger.info(f"Patient: {patient_data.get('age_years')}y, {patient_data.get('sex')}, infection: {patient_data.get('infection_site')}")
     
     try:

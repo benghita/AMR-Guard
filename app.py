@@ -12,6 +12,7 @@ import streamlit as st
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from src.form_config import CREATININE_PROMINENT_SITES, SITE_SPECIFIC_FIELDS, SUSPECTED_SOURCE_OPTIONS
 from src.tools import (
     calculate_mic_trend,
     get_empirical_therapy_guidance,
@@ -380,13 +381,75 @@ def page_patient_analysis():
             height = st.number_input("Height (cm)", 50.0, 250.0, 170.0, step=0.5)
         with c2:
             sex = st.selectbox("Biological sex", ["male", "female"])
-            creatinine = st.number_input("Serum Creatinine (mg/dL)", 0.1, 20.0, 1.2, step=0.1)
+            # Infection site is needed to decide creatinine visibility, so render it first
+            # (Streamlit reruns top-to-bottom, but c3 renders in the same pass, so we
+            #  read infection_site from session state on the *next* rerun.  We default
+            #  to the current widget value via a placeholder key.)
+            infection_site = st.session_state.get("_infection_site_val", "urinary")
+            if infection_site in CREATININE_PROMINENT_SITES:
+                creatinine = st.number_input("Serum Creatinine (mg/dL)", 0.1, 20.0, 1.2, step=0.1,
+                                             help="Required for CrCl-based dose adjustment")
+            else:
+                renal_flag = st.checkbox("Known renal impairment / CKD?",
+                                         help="Check to enter serum creatinine for dose adjustment")
+                creatinine = (
+                    st.number_input("Serum Creatinine (mg/dL)", 0.1, 20.0, 1.2, step=0.1)
+                    if renal_flag else None
+                )
         with c3:
             infection_site = st.selectbox(
                 "Primary infection site",
                 ["urinary", "respiratory", "bloodstream", "skin", "intra-abdominal", "CNS", "other"],
+                key="_infection_site_val",
             )
-            suspected_source = st.text_input("Suspected source", placeholder="e.g., community-acquired UTI")
+            source_options = SUSPECTED_SOURCE_OPTIONS.get(infection_site, [])
+            if source_options:
+                suspected_source = st.selectbox("Suspected source", source_options)
+                if suspected_source == "Other":
+                    suspected_source = st.text_input(
+                        "Specify source", placeholder="Describe the suspected source"
+                    )
+            else:
+                suspected_source = st.text_input(
+                    "Suspected source", placeholder="e.g., community-acquired infection"
+                )
+
+    # ── Site-specific assessment (dynamic per infection site) ──
+    site_vitals: dict[str, str] = {}
+    site_fields = SITE_SPECIFIC_FIELDS.get(infection_site, [])
+    if site_fields:
+        with st.expander(f"Site-Specific Assessment — {infection_site.title()}", expanded=True):
+            cols = st.columns(2)
+            for i, field in enumerate(site_fields):
+                col = cols[i % 2]
+                with col:
+                    fkey = f"site_{field['key']}"
+                    ftype = field["type"]
+                    if ftype == "selectbox":
+                        val = st.selectbox(field["label"], field["options"], key=fkey)
+                    elif ftype == "multiselect":
+                        val = st.multiselect(field["label"], field["options"], key=fkey)
+                        val = ", ".join(val) if val else ""
+                    elif ftype == "number_input":
+                        val = st.number_input(
+                            field["label"],
+                            min_value=field.get("min", 0.0),
+                            max_value=field.get("max", 999.0),
+                            value=field.get("default", 0.0),
+                            step=field.get("step", 1.0),
+                            key=fkey,
+                        )
+                        val = str(val)
+                    elif ftype == "checkbox":
+                        val = st.checkbox(
+                            field["label"], value=field.get("default", False), key=fkey
+                        )
+                        val = "Yes" if val else "No"
+                    elif ftype == "text_input":
+                        val = st.text_input(field["label"], key=fkey)
+                    else:
+                        continue
+                    site_vitals[field["key"]] = str(val)
 
     with st.expander("Medical History"):
         c1, c2 = st.columns(2)
@@ -404,9 +467,56 @@ def page_patient_analysis():
             )
 
     with st.expander("Lab / Culture Results  (optional — triggers targeted pathway)"):
-        method = st.radio("Input method", ["None — empirical pathway only", "Paste lab text"], horizontal=True)
+        method = st.radio(
+            "Input method",
+            ["None — empirical pathway only", "Upload file (PDF / image)", "Paste lab text"],
+            horizontal=True,
+        )
         labs_raw_text = None
-        if method == "Paste lab text":
+        labs_image_bytes = None
+
+        if method == "Upload file (PDF / image)":
+            uploaded = st.file_uploader(
+                "Lab report file",
+                type=["pdf", "png", "jpg", "jpeg", "tiff", "tif", "bmp"],
+                help="Upload a culture & sensitivity report, antibiogram, or any lab document.",
+            )
+            if uploaded is not None:
+                file_bytes = uploaded.read()
+                ext = uploaded.name.rsplit(".", 1)[-1].lower()
+                if ext == "pdf":
+                    # Extract text from PDF using pypdf
+                    import pypdf
+                    from io import BytesIO
+                    try:
+                        reader = pypdf.PdfReader(BytesIO(file_bytes))
+                        extracted = "\n".join(
+                            page.extract_text() or "" for page in reader.pages
+                        ).strip()
+                        if extracted:
+                            labs_raw_text = extracted
+                            st.success(f"PDF parsed — {len(reader.pages)} page(s), {len(extracted)} characters extracted.")
+                        else:
+                            st.warning(
+                                "PDF text extraction returned empty content (scanned PDF?). "
+                                "The file will be processed as an image by the vision model."
+                            )
+                            # Convert first page to image fallback via pillow (requires pypdf extras)
+                            labs_image_bytes = file_bytes
+                    except Exception as e:
+                        st.error(f"PDF parsing failed: {e}")
+                else:
+                    # Image file — pass directly to the multimodal model
+                    labs_image_bytes = file_bytes
+                    from PIL import Image as _PILImage
+                    from io import BytesIO as _BytesIO
+                    try:
+                        thumb = _PILImage.open(_BytesIO(file_bytes))
+                        st.image(thumb, caption=f"Uploaded: {uploaded.name}", width=320)
+                    except Exception:
+                        st.info(f"Image uploaded: {uploaded.name}")
+
+        elif method == "Paste lab text":
             labs_raw_text = st.text_area(
                 "Lab report",
                 placeholder=(
@@ -422,6 +532,7 @@ def page_patient_analysis():
     run_btn = st.button("Run Agent Pipeline", type="primary", use_container_width=False)
 
     if run_btn:
+        has_lab_input = bool(labs_raw_text or labs_image_bytes)
         patient_data = {
             "age_years": age,
             "weight_kg": weight,
@@ -433,11 +544,13 @@ def page_patient_analysis():
             "medications": [m.strip() for m in medications.split("\n") if m.strip()],
             "allergies": [a.strip() for a in allergies.split("\n") if a.strip()],
             "comorbidities": list(comorbidities) + list(risk_factors),
+            "vitals": site_vitals,
+            "labs_image_bytes": labs_image_bytes,
         }
 
         stages = (
             ["Intake Historian", "Vision Specialist", "Trend Analyst", "Clinical Pharmacologist"]
-            if labs_raw_text
+            if has_lab_input
             else ["Intake Historian", "Clinical Pharmacologist"]
         )
 
@@ -449,7 +562,7 @@ def page_patient_analysis():
             from src.graph import run_pipeline
             result = run_pipeline(patient_data, labs_raw_text)
         except Exception:
-            result = _demo_result(patient_data, labs_raw_text)
+            result = _demo_result(patient_data, labs_raw_text or bool(labs_image_bytes))
 
         prog.progress(100, text="Complete")
         st.session_state.pipeline_result = result

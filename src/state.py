@@ -64,7 +64,8 @@ class InfectionState(TypedDict, total=False):
     vitals: NotRequired[Dict[str, str]]  # flexible key/value, e.g. {"BP": "120/80"}
 
     # Lab data & MICs
-    labs_raw_text: NotRequired[Optional[str]]  # raw OCR or PDF text
+    labs_raw_text: NotRequired[Optional[str]]   # raw OCR or pasted text
+    labs_image_bytes: NotRequired[Optional[bytes]]  # uploaded image (PNG/JPG/TIFF) for vision model
     labs_parsed: NotRequired[List[LabResult]]
     mic_data: NotRequired[List[MICDatum]]
     mic_trend_summary: NotRequired[Optional[str]]
