@@ -63,7 +63,7 @@ def main():
         print("                    --unzip -p docs/drug_safety/")
 
     print()
-    print("To run the app:  uv run streamlit run app.py")
+    print("To run the app:  uv run gradio app.py")
     print()
 
 

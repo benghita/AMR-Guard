@@ -1,13 +1,8 @@
 """ChromaDB vector store for unstructured document RAG."""
 
-import chromadb
-from chromadb.utils import embedding_functions
 from pathlib import Path
 from typing import Optional
 import hashlib
-
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pypdf import PdfReader
 
 from ..config import get_settings
 
@@ -16,8 +11,9 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 DOCS_DIR = PROJECT_ROOT / "docs"
 
 
-def get_chroma_client() -> chromadb.PersistentClient:
+def get_chroma_client():
     """Get ChromaDB persistent client."""
+    import chromadb
     chroma_dir = get_settings().chroma_db_dir
     chroma_dir.mkdir(parents=True, exist_ok=True)
     return chromadb.PersistentClient(path=str(chroma_dir))
@@ -25,6 +21,7 @@ def get_chroma_client() -> chromadb.PersistentClient:
 
 def get_embedding_function():
     """Get the embedding function for ChromaDB."""
+    from chromadb.utils import embedding_functions
     return embedding_functions.SentenceTransformerEmbeddingFunction(
         model_name="all-MiniLM-L6-v2"
     )
@@ -32,6 +29,7 @@ def get_embedding_function():
 
 def extract_pdf_text(pdf_path: Path) -> str:
     """Extract text from PDF file."""
+    from pypdf import PdfReader
     reader = PdfReader(pdf_path)
     text = ""
     for page in reader.pages:
@@ -41,6 +39,7 @@ def extract_pdf_text(pdf_path: Path) -> str:
 
 def chunk_text(text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> list[str]:
     """Split text into chunks for embedding."""
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
@@ -55,7 +54,7 @@ def generate_doc_id(text: str, index: int) -> str:
     return hashlib.md5(hash_input.encode()).hexdigest()
 
 
-def init_idsa_guidelines_collection() -> chromadb.Collection:
+def init_idsa_guidelines_collection():
     """Initialize the IDSA treatment guidelines collection."""
     client = get_chroma_client()
     ef = get_embedding_function()
@@ -79,7 +78,7 @@ def init_idsa_guidelines_collection() -> chromadb.Collection:
     return collection
 
 
-def init_mic_reference_collection() -> chromadb.Collection:
+def init_mic_reference_collection():
     """Initialize the MIC reference documentation collection."""
     client = get_chroma_client()
     ef = get_embedding_function()
@@ -219,7 +218,7 @@ def import_mic_reference() -> int:
     return len(documents)
 
 
-def get_collection(name: str) -> Optional[chromadb.Collection]:
+def get_collection(name: str) -> Optional[object]:
     """Get a collection by name."""
     client = get_chroma_client()
     ef = get_embedding_function()
