@@ -1,7 +1,6 @@
 """Data import scripts for Med-I-C structured documents."""
 
 import pandas as pd
-import re
 from pathlib import Path
 from .database import (
     get_connection, init_database, execute_many,
@@ -10,7 +9,7 @@ from .database import (
 
 
 def safe_float(value):
-    """Safely convert a value to float, returning None on failure."""
+    """Convert value to float; return None if the value is NaN or non-numeric."""
     if pd.isna(value):
         return None
     try:
@@ -20,7 +19,7 @@ def safe_float(value):
 
 
 def safe_int(value):
-    """Safely convert a value to int, returning None on failure."""
+    """Convert value to int via float; return None if the value is NaN or non-numeric."""
     if pd.isna(value):
         return None
     try:
@@ -29,41 +28,46 @@ def safe_int(value):
         return None
 
 
+def safe_str(value) -> str:
+    """Convert value to string; return empty string for None or NaN."""
+    if value is None or pd.isna(value):
+        return ''
+    return str(value)
+
+
 def classify_severity(description: str) -> str:
-    """Classify drug interaction severity based on description keywords."""
+    """
+    Classify drug interaction severity from the interaction description text.
+
+    Returns 'major', 'moderate', or 'minor' based on keyword presence.
+    Major keywords take precedence over moderate.
+    """
     if not description:
         return "unknown"
 
     desc_lower = description.lower()
 
-    # Major severity indicators
     major_keywords = [
         "cardiotoxic", "nephrotoxic", "hepatotoxic", "neurotoxic",
         "fatal", "death", "severe", "contraindicated", "arrhythmia",
         "qt prolongation", "seizure", "bleeding", "hemorrhage",
-        "serotonin syndrome", "neuroleptic malignant"
+        "serotonin syndrome", "neuroleptic malignant",
     ]
-
-    # Moderate severity indicators
     moderate_keywords = [
         "increase", "decrease", "reduce", "enhance", "inhibit",
         "metabolism", "concentration", "absorption", "excretion",
-        "therapeutic effect", "adverse effect", "toxicity"
+        "therapeutic effect", "adverse effect", "toxicity",
     ]
 
-    for keyword in major_keywords:
-        if keyword in desc_lower:
-            return "major"
-
-    for keyword in moderate_keywords:
-        if keyword in desc_lower:
-            return "moderate"
-
+    if any(kw in desc_lower for kw in major_keywords):
+        return "major"
+    if any(kw in desc_lower for kw in moderate_keywords):
+        return "moderate"
     return "minor"
 
 
 def import_eml_antibiotics() -> int:
-    """Import WHO EML antibiotic classification data."""
+    """Import WHO EML antibiotic classification data from the three AWaRe Excel files."""
     print("Importing EML antibiotic data...")
 
     eml_files = {
@@ -79,28 +83,20 @@ def import_eml_antibiotics() -> int:
             continue
 
         try:
-            # Use openpyxl directly with read_only=True for faster loading
             import openpyxl
             wb = openpyxl.load_workbook(filepath, read_only=True)
             ws = wb.active
 
-            # Get headers from first row
-            headers = []
-            for cell in ws[1]:
-                headers.append(str(cell.value).strip().lower().replace(' ', '_') if cell.value else f'col_{len(headers)}')
+            headers = [
+                str(cell.value).strip().lower().replace(' ', '_') if cell.value else f'col_{i}'
+                for i, cell in enumerate(ws[1])
+            ]
 
-            # Process data rows
-            for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            for row in ws.iter_rows(min_row=2, values_only=True):
                 row_dict = dict(zip(headers, row))
-
                 medicine = str(row_dict.get('medicine_name', row_dict.get('medicine', '')))
-                if not medicine or medicine == 'None' or medicine == 'nan':
+                if not medicine or medicine in ('None', 'nan'):
                     continue
-
-                def safe_str(val):
-                    if val is None or pd.isna(val):
-                        return ''
-                    return str(val)
 
                 records.append((
                     medicine,
@@ -114,20 +110,20 @@ def import_eml_antibiotics() -> int:
                 ))
 
             wb.close()
-            print(f"  Loaded {len([r for r in records if r[1] == category])} from {category}")
+            print(f"  Loaded {sum(1 for r in records if r[1] == category)} from {category}")
 
         except Exception as e:
             print(f"  Warning: Error reading {filepath}: {e}")
             continue
 
     if records:
-        query = """
-            INSERT INTO eml_antibiotics
-            (medicine_name, who_category, eml_section, formulations,
-             indication, atc_codes, combined_with, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """
-        execute_many(query, records)
+        execute_many(
+            """INSERT INTO eml_antibiotics
+               (medicine_name, who_category, eml_section, formulations,
+                indication, atc_codes, combined_with, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            records,
+        )
         print(f"  Imported {len(records)} EML antibiotic records total")
 
     return len(records)
@@ -143,95 +139,78 @@ def import_atlas_susceptibility() -> int:
         print(f"  Warning: {filepath} not found, skipping...")
         return 0
 
-    # Read the raw data to find the header row and extract region
     df_raw = pd.read_excel(filepath, sheet_name="Percent", header=None)
 
-    # Extract region from the title (row 1)
+    # Title row contains "Percentage Susceptibility from <Country>"
     region = "Unknown"
-    for idx, row in df_raw.head(5).iterrows():
+    for _, row in df_raw.head(5).iterrows():
         cell = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ""
         if "from" in cell.lower():
-            # Extract country from "Percentage Susceptibility from Argentina"
             parts = cell.split("from")
             if len(parts) > 1:
                 region = parts[1].strip()
             break
 
-    # Find the header row (contains 'Antibacterial' or 'N')
-    header_row = 4  # Default
+    # Locate the actual header row by finding "Antibacterial"
+    header_row = 4
     for idx, row in df_raw.head(10).iterrows():
         if any('Antibacterial' in str(v) for v in row.values if pd.notna(v)):
             header_row = idx
             break
 
-    # Read with proper header
     df = pd.read_excel(filepath, sheet_name="Percent", header=header_row)
-
-    # Standardize column names
     df.columns = [str(col).strip().lower().replace(' ', '_').replace('.', '') for col in df.columns]
 
     records = []
     for _, row in df.iterrows():
         antibiotic = str(row.get('antibacterial', ''))
-
-        # Skip empty or non-antibiotic rows
         if not antibiotic or antibiotic == 'nan' or 'omitted' in antibiotic.lower():
             continue
         if 'in vitro' in antibiotic.lower() or 'table cells' in antibiotic.lower():
             continue
 
-        # Get susceptibility values
-        n_value = row.get('n', None)
-        pct_s = row.get('susc', row.get('susceptible', None))
-        pct_i = row.get('int', row.get('intermediate', None))
-        pct_r = row.get('res', row.get('resistant', None))
-
-        # Use safe conversion functions
-        n_int = safe_int(n_value)
-        s_float = safe_float(pct_s)
+        n_int = safe_int(row.get('n'))
+        s_float = safe_float(row.get('susc', row.get('susceptible')))
 
         if n_int is not None and s_float is not None:
             records.append((
-                "General",  # Species - will be refined if more data available
-                "",  # Family
+                "General",
+                "",
                 antibiotic,
                 s_float,
-                safe_float(pct_i),
-                safe_float(pct_r),
+                safe_float(row.get('int', row.get('intermediate'))),
+                safe_float(row.get('res', row.get('resistant'))),
                 n_int,
-                2024,  # Year - from the data context
+                2024,
                 region,
-                "ATLAS"
+                "ATLAS",
             ))
 
     if records:
-        query = """
-            INSERT INTO atlas_susceptibility
-            (species, family, antibiotic, percent_susceptible,
-             percent_intermediate, percent_resistant, total_isolates,
-             year, region, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
-        execute_many(query, records)
+        execute_many(
+            """INSERT INTO atlas_susceptibility
+               (species, family, antibiotic, percent_susceptible,
+                percent_intermediate, percent_resistant, total_isolates,
+                year, region, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            records,
+        )
         print(f"  Imported {len(records)} ATLAS susceptibility records from {region}")
 
     return len(records)
 
 
 def import_mic_breakpoints() -> int:
-    """Import EUCAST MIC breakpoint tables."""
+    """Import EUCAST MIC breakpoint tables from the Excel file."""
     print("Importing MIC breakpoint data...")
 
     filepath = DOCS_DIR / "mic_breakpoints" / "v_16.0__BreakpointTables.xlsx"
-
     if not filepath.exists():
         print(f"  Warning: {filepath} not found, skipping...")
         return 0
 
-    # Get all sheet names
     xl = pd.ExcelFile(filepath)
-
-    # Skip non-pathogen sheets
+    # These sheets contain metadata/guidance, not pathogen-specific breakpoints
     skip_sheets = {'Content', 'Changes', 'Notes', 'Guidance', 'Dosages',
                    'Technical uncertainty', 'PK PD breakpoints', 'PK PD cutoffs'}
 
@@ -239,58 +218,48 @@ def import_mic_breakpoints() -> int:
     for sheet_name in xl.sheet_names:
         if sheet_name in skip_sheets:
             continue
-
         try:
             df = pd.read_excel(filepath, sheet_name=sheet_name, header=None)
-
-            # Try to find antibiotic data - look for rows with MIC values
-            pathogen_group = sheet_name
-
-            # Simple heuristic: look for rows that might contain antibiotic names and MIC values
-            for idx, row in df.iterrows():
+            for _, row in df.iterrows():
                 row_values = [str(v).strip() for v in row.values if pd.notna(v)]
+                if len(row_values) < 2:
+                    continue
 
-                # Look for rows that might be antibiotic entries
-                if len(row_values) >= 2:
-                    potential_antibiotic = row_values[0]
+                potential_antibiotic = row_values[0]
+                if any(kw in potential_antibiotic.lower() for kw in
+                       ['antibiotic', 'agent', 'note', 'disk', 'mic', 'breakpoint']):
+                    continue
 
-                    # Skip header-like rows
-                    if any(kw in potential_antibiotic.lower() for kw in
-                           ['antibiotic', 'agent', 'note', 'disk', 'mic', 'breakpoint']):
-                        continue
+                # Extract numeric MIC values; strip inequality signs
+                mic_values = []
+                for v in row_values[1:]:
+                    try:
+                        mic_values.append(float(v.replace('≤', '').replace('>', '').replace('<', '').strip()))
+                    except (ValueError, AttributeError):
+                        pass
 
-                    # Try to extract MIC values (numbers)
-                    mic_values = []
-                    for v in row_values[1:]:
-                        try:
-                            mic_values.append(float(v.replace('≤', '').replace('>', '').replace('<', '').strip()))
-                        except (ValueError, AttributeError):
-                            pass
-
-                    if len(mic_values) >= 2 and len(potential_antibiotic) > 2:
-                        records.append((
-                            pathogen_group,
-                            potential_antibiotic,
-                            None,  # route
-                            mic_values[0] if len(mic_values) > 0 else None,  # S breakpoint
-                            mic_values[1] if len(mic_values) > 1 else None,  # R breakpoint
-                            None,  # disk S
-                            None,  # disk R
-                            None,  # notes
-                            "16.0"
-                        ))
+                if len(mic_values) >= 2 and len(potential_antibiotic) > 2:
+                    records.append((
+                        sheet_name,          # pathogen_group
+                        potential_antibiotic,
+                        None,                # route
+                        mic_values[0],       # S breakpoint
+                        mic_values[1],       # R breakpoint
+                        None, None, None,    # disk S, disk R, notes
+                        "16.0",
+                    ))
         except Exception as e:
             print(f"  Warning: Could not parse sheet '{sheet_name}': {e}")
             continue
 
     if records:
-        query = """
-            INSERT INTO mic_breakpoints
-            (pathogen_group, antibiotic, route, mic_susceptible, mic_resistant,
-             disk_susceptible, disk_resistant, notes, eucast_version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
-        execute_many(query, records)
+        execute_many(
+            """INSERT INTO mic_breakpoints
+               (pathogen_group, antibiotic, route, mic_susceptible, mic_resistant,
+                disk_susceptible, disk_resistant, notes, eucast_version)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            records,
+        )
         print(f"  Imported {len(records)} MIC breakpoint records")
 
     return len(records)
@@ -303,36 +272,32 @@ INTERACTIONS_CSV = DOCS_DIR / "drug_safety" / "db_drug_interactions.csv"
 
 def _resolve_interactions_csv() -> Path | None:
     """
-    Return the path to the drug interactions CSV, downloading it if needed.
+    Find the drug interactions CSV file.
 
-    Resolution order:
-    1. docs/drug_safety/db_drug_interactions.csv  (already present locally)
-    2. /kaggle/input/drug-drug-interactions/       (Kaggle notebook with dataset attached)
-    3. Kaggle API download                         (local dev with ~/.kaggle/kaggle.json)
+    Checks in order:
+    1. docs/drug_safety/db_drug_interactions.csv (local)
+    2. /kaggle/input/drug-drug-interactions/ (Kaggle notebook with dataset attached)
+    3. Kaggle API download (requires ~/.kaggle/kaggle.json)
     """
-    # 1. Already present
     if INTERACTIONS_CSV.exists():
         return INTERACTIONS_CSV
 
-    # 2. Kaggle input mount (dataset added via Kaggle UI)
-    for candidate in KAGGLE_INPUT_DIR.glob("*.csv") if KAGGLE_INPUT_DIR.exists() else []:
-        print(f"  Found CSV in Kaggle input: {candidate}")
-        return candidate
+    if KAGGLE_INPUT_DIR.exists():
+        for candidate in KAGGLE_INPUT_DIR.glob("*.csv"):
+            print(f"  Found CSV in Kaggle input: {candidate}")
+            return candidate
 
-    # 3. Download via Kaggle API
     print(f"  CSV not found — downloading from Kaggle dataset '{KAGGLE_DATASET}' ...")
     try:
-        import kaggle  # noqa: F401 – triggers credential check
+        import kaggle  # noqa: F401 — triggers credential check
+        import subprocess
         dest = INTERACTIONS_CSV.parent
         dest.mkdir(parents=True, exist_ok=True)
-        import subprocess
         result = subprocess.run(
-            ["kaggle", "datasets", "download", "-d", KAGGLE_DATASET,
-             "--unzip", "-p", str(dest)],
+            ["kaggle", "datasets", "download", "-d", KAGGLE_DATASET, "--unzip", "-p", str(dest)],
             capture_output=True, text=True,
         )
         if result.returncode == 0:
-            # Find the downloaded CSV
             for f in dest.glob("*.csv"):
                 print(f"  Downloaded: {f.name}")
                 return f
@@ -347,23 +312,18 @@ def _resolve_interactions_csv() -> Path | None:
 
 
 def import_drug_interactions(limit: int = None) -> int:
-    """Import drug-drug interaction database from Kaggle dataset mghobashy/drug-drug-interactions."""
+    """Import drug-drug interactions from the DDInter CSV (Kaggle dataset mghobashy/drug-drug-interactions)."""
     print("Importing drug interactions data...")
 
     filepath = _resolve_interactions_csv()
-
     if filepath is None:
         print("  Skipping drug interactions — CSV unavailable.")
         print(f"  To fix: attach the Kaggle dataset '{KAGGLE_DATASET}' to your notebook,")
         print("  or set up ~/.kaggle/kaggle.json for API access.")
         return 0
 
-    # Read CSV in chunks due to large size
-    chunk_size = 10000
     total_records = 0
-
-    for chunk in pd.read_csv(filepath, chunksize=chunk_size):
-        # Standardize column names
+    for chunk in pd.read_csv(filepath, chunksize=10000):
         chunk.columns = [col.strip().lower().replace(' ', '_') for col in chunk.columns]
 
         records = []
@@ -372,19 +332,14 @@ def import_drug_interactions(limit: int = None) -> int:
             drug_2 = str(row.get('drug_2', row.get('drug2', row.iloc[1] if len(row) > 1 else '')))
             description = str(row.get('interaction_description', row.get('description',
                              row.get('interaction', row.iloc[2] if len(row) > 2 else ''))))
-
-            severity = classify_severity(description)
-
             if drug_1 and drug_2:
-                records.append((drug_1, drug_2, description, severity))
+                records.append((drug_1, drug_2, description, classify_severity(description)))
 
         if records:
-            query = """
-                INSERT INTO drug_interactions
-                (drug_1, drug_2, interaction_description, severity)
-                VALUES (?, ?, ?, ?)
-            """
-            execute_many(query, records)
+            execute_many(
+                "INSERT INTO drug_interactions (drug_1, drug_2, interaction_description, severity) VALUES (?, ?, ?, ?)",
+                records,
+            )
             total_records += len(records)
 
         if limit and total_records >= limit:
@@ -395,24 +350,19 @@ def import_drug_interactions(limit: int = None) -> int:
 
 
 def import_all_data(interactions_limit: int = None) -> dict:
-    """Import all structured data into the database."""
+    """Initialize the database and import all structured data sources."""
     print(f"\n{'='*50}")
     print("Med-I-C Data Import")
     print(f"{'='*50}\n")
 
-    # Initialize database
     init_database()
 
-    # Clear existing data
     with get_connection() as conn:
-        conn.execute("DELETE FROM eml_antibiotics")
-        conn.execute("DELETE FROM atlas_susceptibility")
-        conn.execute("DELETE FROM mic_breakpoints")
-        conn.execute("DELETE FROM drug_interactions")
+        for table in ("eml_antibiotics", "atlas_susceptibility", "mic_breakpoints", "drug_interactions"):
+            conn.execute(f"DELETE FROM {table}")
         conn.commit()
     print("Cleared existing data\n")
 
-    # Import all data
     results = {
         "eml_antibiotics": import_eml_antibiotics(),
         "atlas_susceptibility": import_atlas_susceptibility(),
@@ -430,5 +380,4 @@ def import_all_data(interactions_limit: int = None) -> dict:
 
 
 if __name__ == "__main__":
-    # Import with a limit on interactions for faster demo
     import_all_data(interactions_limit=50000)

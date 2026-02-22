@@ -1,12 +1,9 @@
 
-from __future__ import annotations
-
 from typing import Dict, List, Literal, NotRequired, Optional, TypedDict
 
 
 class LabResult(TypedDict, total=False):
-    """Structured representation of a single lab value."""
-
+    """A single lab value with optional reference range and flag."""
     name: str
     value: str
     unit: NotRequired[Optional[str]]
@@ -15,21 +12,19 @@ class LabResult(TypedDict, total=False):
 
 
 class MICDatum(TypedDict, total=False):
-    """Single MIC measurement for a bug–drug pair."""
-
+    """A single MIC measurement for one organism–antibiotic pair."""
     organism: str
     antibiotic: str
     mic_value: str
     mic_unit: NotRequired[Optional[str]]
     interpretation: NotRequired[Optional[Literal["S", "I", "R"]]]
-    breakpoint_source: NotRequired[Optional[str]]  # e.g. EUCAST v16.0
+    breakpoint_source: NotRequired[Optional[str]]  # e.g. "EUCAST v16.0"
     year: NotRequired[Optional[int]]
-    site: NotRequired[Optional[str]]  # e.g. blood, urine
+    site: NotRequired[Optional[str]]  # e.g. "blood", "urine"
 
 
 class Recommendation(TypedDict, total=False):
     """Final clinical recommendation assembled by Agent 4."""
-
     primary_antibiotic: Optional[str]
     backup_antibiotic: NotRequired[Optional[str]]
     dose: Optional[str]
@@ -43,24 +38,19 @@ class Recommendation(TypedDict, total=False):
 
 class InfectionState(TypedDict, total=False):
     """
-    Global LangGraph state for the Med-I-C pipeline.
+    Shared state object passed between all agents in the pipeline.
 
-    All agents read from and write back to this object.
-    Most keys are optional to keep the schema flexible across stages.
+    All keys are optional so each agent only needs to populate its own outputs.
     """
 
-    # ------------------------------------------------------------------
     # Patient identity & demographics
-    # ------------------------------------------------------------------
     patient_id: NotRequired[Optional[str]]
     age_years: NotRequired[Optional[float]]
     sex: NotRequired[Optional[Literal["male", "female", "other", "unknown"]]]
     weight_kg: NotRequired[Optional[float]]
     height_cm: NotRequired[Optional[float]]
 
-    # ------------------------------------------------------------------
     # Clinical context
-    # ------------------------------------------------------------------
     suspected_source: NotRequired[Optional[str]]  # e.g. "community UTI"
     comorbidities: NotRequired[List[str]]
     medications: NotRequired[List[str]]
@@ -68,58 +58,36 @@ class InfectionState(TypedDict, total=False):
     infection_site: NotRequired[Optional[str]]
     country_or_region: NotRequired[Optional[str]]
 
-    # ------------------------------------------------------------------
-    # Renal function / vitals
-    # ------------------------------------------------------------------
+    # Renal function & vitals
     serum_creatinine_mg_dl: NotRequired[Optional[float]]
     creatinine_clearance_ml_min: NotRequired[Optional[float]]
     vitals: NotRequired[Dict[str, str]]  # flexible key/value, e.g. {"BP": "120/80"}
 
-    # ------------------------------------------------------------------
     # Lab data & MICs
-    # ------------------------------------------------------------------
-    labs_raw_text: NotRequired[Optional[str]]  # raw OCR / PDF text
+    labs_raw_text: NotRequired[Optional[str]]  # raw OCR or PDF text
     labs_parsed: NotRequired[List[LabResult]]
-
     mic_data: NotRequired[List[MICDatum]]
     mic_trend_summary: NotRequired[Optional[str]]
 
-    # ------------------------------------------------------------------
-    # Stage / routing metadata
-    # ------------------------------------------------------------------
+    # Routing flags set by agents
     stage: NotRequired[Literal["empirical", "targeted"]]
     route_to_vision: NotRequired[bool]
     route_to_trend_analyst: NotRequired[bool]
 
-    # ------------------------------------------------------------------
     # Agent outputs
-    # ------------------------------------------------------------------
-    intake_notes: NotRequired[Optional[str]]  # Agent 1
-    vision_notes: NotRequired[Optional[str]]  # Agent 2
-    trend_notes: NotRequired[Optional[str]]  # Agent 3
-    pharmacology_notes: NotRequired[Optional[str]]  # Agent 4
-
+    intake_notes: NotRequired[Optional[str]]       # Agent 1
+    vision_notes: NotRequired[Optional[str]]       # Agent 2
+    trend_notes: NotRequired[Optional[str]]        # Agent 3
+    pharmacology_notes: NotRequired[Optional[str]] # Agent 4
     recommendation: NotRequired[Optional[Recommendation]]
 
-    # ------------------------------------------------------------------
-    # RAG / context + safety
-    # ------------------------------------------------------------------
+    # RAG context & safety
     rag_context: NotRequired[Optional[str]]
     guideline_sources: NotRequired[List[str]]
     breakpoint_sources: NotRequired[List[str]]
     safety_warnings: NotRequired[List[str]]
 
-    # ------------------------------------------------------------------
-    # Diagnostics / debugging
-    # ------------------------------------------------------------------
+    # Diagnostics
     errors: NotRequired[List[str]]
     debug_log: NotRequired[List[str]]
-
-
-__all__ = [
-    "LabResult",
-    "MICDatum",
-    "Recommendation",
-    "InfectionState",
-]
 
