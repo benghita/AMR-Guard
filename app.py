@@ -13,6 +13,30 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# ── huggingface_hub compatibility shim ───────────────────────────────────────
+# Older gradio versions (pre-5.7) import HfFolder from huggingface_hub in
+# oauth.py. HfFolder was removed in huggingface_hub >= 0.25. Patch it back
+# in-memory before importing gradio so the old oauth.py can find it.
+try:
+    from huggingface_hub import HfFolder as _check  # noqa: F401
+except ImportError:
+    import huggingface_hub as _hfh
+
+    class _HfFolder:
+        @staticmethod
+        def get_token():
+            return os.environ.get("HF_TOKEN") or _hfh.get_token()
+
+        @staticmethod
+        def save_token(token: str) -> None:  # noqa: ARG004
+            pass
+
+        @staticmethod
+        def delete_token() -> None:
+            pass
+
+    _hfh.HfFolder = _HfFolder
+
 # ── HuggingFace Spaces: auto-build knowledge base on first boot ───────────────
 _DB_PATH = PROJECT_ROOT / os.getenv("MEDIC_DATA_DIR", "data") / "amr_guard.db"
 if os.environ.get("SPACE_ID") and not _DB_PATH.exists():
