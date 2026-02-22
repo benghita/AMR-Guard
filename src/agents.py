@@ -12,7 +12,7 @@ import logging
 from typing import Optional
 
 from .config import get_settings
-from .loader import run_inference, TextModelName
+from .loader import run_inference, run_inference_with_image, TextModelName
 from .prompts import (
     INTAKE_HISTORIAN_SYSTEM,
     INTAKE_HISTORIAN_PROMPT,
@@ -66,12 +66,17 @@ def run_intake_historian(state: InfectionState) -> InfectionState:
         patient_context={"pathogen_type": state.get("suspected_source")},
     )
 
+    site_vitals_str = "\n".join(
+        f"- {k.replace('_', ' ').title()}: {v}" for k, v in state.get("vitals", {}).items()
+    ) or "None provided"
+
     prompt = f"{INTAKE_HISTORIAN_SYSTEM}\n\n{INTAKE_HISTORIAN_PROMPT.format(
         patient_data=patient_data,
         medications=', '.join(state.get('medications', [])) or 'None reported',
         allergies=', '.join(state.get('allergies', [])) or 'No known allergies',
         infection_site=state.get('infection_site', 'Unknown'),
         suspected_source=state.get('suspected_source', 'Unknown'),
+        site_vitals=site_vitals_str,
         rag_context=rag_context,
     )}"
 
@@ -105,14 +110,24 @@ def run_vision_specialist(state: InfectionState) -> InfectionState:
     logger.info("Running Vision Specialist agent...")
 
     labs_raw = state.get("labs_raw_text", "")
-    if not labs_raw:
+    labs_image_bytes = state.get("labs_image_bytes")
+
+    if not labs_raw and not labs_image_bytes:
         logger.info("No lab data to process, skipping Vision Specialist")
         state["vision_notes"] = "No lab data provided"
         state["route_to_trend_analyst"] = False
         return state
 
-    # Language detection is not implemented; we assume English or instruct the model to translate
-    language = "English (assumed)"
+    # Determine input modality and prepare prompt content description
+    if labs_image_bytes:
+        source_format = "image"
+        language = "Auto-detected"
+        report_content = "See attached image — extract all lab data visible in the image."
+    else:
+        source_format = "text"
+        language = "English (assumed)"
+        report_content = labs_raw
+
     rag_context = get_context_for_agent(
         agent_name="vision_specialist",
         query="culture sensitivity susceptibility interpretation",
@@ -120,13 +135,22 @@ def run_vision_specialist(state: InfectionState) -> InfectionState:
     )
 
     prompt = f"{VISION_SPECIALIST_SYSTEM}\n\n{VISION_SPECIALIST_PROMPT.format(
-        report_content=labs_raw,
-        source_format='text',
+        report_content=report_content,
+        source_format=source_format,
         language=language,
     )}"
 
     try:
-        response = run_inference(prompt=prompt, model_name="medgemma_4b", max_new_tokens=2048, temperature=0.1)
+        if labs_image_bytes:
+            from io import BytesIO
+            from PIL import Image as PILImage
+            image = PILImage.open(BytesIO(labs_image_bytes)).convert("RGB")
+            logger.info(f"Running vision inference on uploaded image ({image.size})")
+            response = run_inference_with_image(
+                prompt=prompt, image=image, model_name="medgemma_4b", max_new_tokens=2048, temperature=0.1
+            )
+        else:
+            response = run_inference(prompt=prompt, model_name="medgemma_4b", max_new_tokens=2048, temperature=0.1)
         parsed = safe_json_parse(response)
         if parsed:
             state["vision_notes"] = json.dumps(parsed, indent=2)
@@ -256,6 +280,10 @@ def run_clinical_pharmacologist(state: InfectionState) -> InfectionState:
         patient_context={"proposed_antibiotic": None},
     )
 
+    site_vitals_str = "\n".join(
+        f"- {k.replace('_', ' ').title()}: {v}" for k, v in state.get("vitals", {}).items()
+    ) or "None provided"
+
     prompt = f"{CLINICAL_PHARMACOLOGIST_SYSTEM}\n\n{CLINICAL_PHARMACOLOGIST_PROMPT.format(
         intake_summary=intake_summary,
         lab_results=lab_results,
@@ -268,6 +296,7 @@ def run_clinical_pharmacologist(state: InfectionState) -> InfectionState:
         infection_site=state.get('infection_site', 'Unknown'),
         suspected_source=state.get('suspected_source', 'Unknown'),
         severity=state.get('intake_notes', {}).get('infection_severity', 'Unknown') if isinstance(state.get('intake_notes'), dict) else 'Unknown',
+        site_vitals=site_vitals_str,
         rag_context=rag_context,
     )}"
 
@@ -355,8 +384,10 @@ def _format_patient_data(state: InfectionState) -> str:
         lines.append(f"Comorbidities: {', '.join(state['comorbidities'])}")
 
     if state.get("vitals"):
-        vitals_str = ", ".join(f"{k}: {v}" for k, v in state["vitals"].items())
-        lines.append(f"Vitals: {vitals_str}")
+        lines.append("Site-Specific Assessment:")
+        for k, v in state["vitals"].items():
+            label = k.replace("_", " ").title()
+            lines.append(f"  - {label}: {v}")
 
     return "\n".join(lines) if lines else "No patient data available"
 

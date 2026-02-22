@@ -58,9 +58,20 @@ def _get_local_multimodal(model_name: TextModelName):
     model = AutoModelForImageTextToText.from_pretrained(model_path, **load_kwargs)
     logger.info(f"Model loaded successfully: {model_path}")
 
-    def _call(prompt: str, max_new_tokens: int = 512, temperature: float = 0.2, **generate_kwargs: Any) -> str:
-        # Build a chat-style input for text-only queries
-        messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
+    def _call(
+        prompt: str,
+        max_new_tokens: int = 512,
+        temperature: float = 0.2,
+        image=None,  # optional PIL.Image.Image for vision-language inference
+        **generate_kwargs: Any,
+    ) -> str:
+        # Build chat content; prepend image token when an image is provided
+        content = []
+        if image is not None:
+            content.append({"type": "image", "image": image})
+        content.append({"type": "text", "text": prompt})
+        messages = [{"role": "user", "content": content}]
+
         inputs = processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True,
             return_dict=True, return_tensors="pt",
@@ -154,4 +165,39 @@ def run_inference(
         return result
     except Exception as e:
         logger.error(f"Inference failed for {model_name}: {e}", exc_info=True)
+        raise
+
+
+def run_inference_with_image(
+    prompt: str,
+    image: Any,  # PIL.Image.Image
+    model_name: TextModelName = "medgemma_4b",
+    max_new_tokens: int = 1024,
+    temperature: float = 0.1,
+    **kwargs: Any,
+) -> str:
+    """
+    Run vision-language inference passing a PIL image alongside the text prompt.
+
+    Falls back to text-only inference if the resolved model is not multimodal
+    (e.g. when medgemma_4b is remapped to a text-only model in the env config).
+    """
+    logger.info(f"Running vision inference with {model_name}, max_tokens={max_new_tokens}")
+    try:
+        model_path = _get_model_path(model_name)
+        if not _is_multimodal(model_path):
+            logger.warning(
+                f"{model_name} ({model_path}) is not a multimodal model; "
+                "falling back to text-only inference."
+            )
+            return run_inference(prompt, model_name, max_new_tokens, temperature, **kwargs)
+
+        model_fn = _get_local_multimodal(model_name)
+        result = model_fn(
+            prompt, max_new_tokens=max_new_tokens, temperature=temperature, image=image, **kwargs
+        )
+        logger.info(f"Vision inference complete, response length: {len(result)} chars")
+        return result
+    except Exception as e:
+        logger.error(f"Vision inference failed for {model_name}: {e}", exc_info=True)
         raise
