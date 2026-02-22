@@ -96,7 +96,7 @@ Go to [huggingface.co/new-space](https://huggingface.co/new-space) and select:
 
 ```bash
 git remote set-url space https://huggingface.co/spaces/<your-username>/amr-guard 2>/dev/null || git remote add space https://huggingface.co/spaces/<your-username>/amr-guard
-git push space master
+git push space master:main
 ```
 
 **3. Add Space Secrets**
