@@ -47,8 +47,6 @@ Patient form ──► Agent 1: Intake Historian  ──► (no lab) ───�
 - HuggingFace account with access granted to:
   - [MedGemma](https://huggingface.co/google/medgemma-4b-it)
   - [TxGemma](https://huggingface.co/google/txgemma-2b-predict)
-- **For cloud deployment:** Google Cloud project with Vertex AI enabled
-
 ---
 
 ## Setup
@@ -68,23 +66,11 @@ cp .env.example .env
 Edit `.env`. Minimum required settings:
 
 ```bash
-# Choose your backend
-MEDIC_DEFAULT_BACKEND=local        # local | vertex
-
 # Local model IDs (HuggingFace)
 MEDIC_LOCAL_MEDGEMMA_4B_MODEL=google/medgemma-4b-it
 MEDIC_LOCAL_MEDGEMMA_27B_MODEL=google/medgemma-4b-it   # use 4B as fallback if <24 GB VRAM
 MEDIC_LOCAL_TXGEMMA_9B_MODEL=google/txgemma-2b-predict
 MEDIC_LOCAL_TXGEMMA_2B_MODEL=google/txgemma-2b-predict
-```
-
-For Vertex AI instead:
-
-```bash
-MEDIC_DEFAULT_BACKEND=vertex
-MEDIC_USE_VERTEX=true
-MEDIC_VERTEX_PROJECT_ID=your-gcp-project-id
-MEDIC_VERTEX_LOCATION=us-central1
 ```
 
 ### 3. Authenticate with HuggingFace
@@ -154,7 +140,7 @@ medic-amr-guard/
 ├── src/
 │   ├── agents.py           # Four agent implementations
 │   ├── graph.py            # LangGraph orchestrator + conditional routing
-│   ├── loader.py           # Model loading: local HuggingFace or Vertex AI
+│   ├── loader.py           # Model loading: local HuggingFace causal LMs
 │   ├── prompts.py          # System and user prompts for all agents
 │   ├── rag.py              # ChromaDB ingestion and retrieval helpers
 │   ├── state.py            # InfectionState TypedDict schema
