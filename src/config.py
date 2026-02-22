@@ -7,7 +7,10 @@ from typing import Literal, Optional
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
-load_dotenv()
+# Explicitly load .env from the project root so it works regardless of CWD
+# (e.g. when imported from a Kaggle notebook whose CWD is /kaggle/working/)
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(_PROJECT_ROOT / ".env")
 
 
 class Settings(BaseModel):
