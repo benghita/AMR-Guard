@@ -1,4 +1,4 @@
-"""Database connection and initialization for Med-I-C."""
+"""Database connection and initialization for AMR-Guard."""
 
 import sqlite3
 from pathlib import Path

@@ -1,4 +1,4 @@
-# Med-I-C Knowledge Storage Strategy
+# AMR-Guard Knowledge Storage Strategy
 
 ## Overview
 
@@ -588,7 +588,7 @@ Output: Targeted therapy with MIC trend analysis & safety alerts
 ## File Structure
 
 ```
-Med-I-C/
+AMR-Guard/
 ├── docs/                          # Source documents
 ├── data/
 │   ├── medic.db                   # SQLite database

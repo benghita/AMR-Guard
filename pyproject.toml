@@ -1,5 +1,5 @@
 [project]
-name = "Med-I-C"
+name = "AMR-Guard"
 version = "0.1.0"
 description = "AMR-Guard: Infection Lifecycle Orchestrator Demo"
 readme = "README.md"

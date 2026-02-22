@@ -1,4 +1,4 @@
-"""Med-I-C Query Tools for AMR-Guard Workflow."""
+"""AMR-Guard Query Tools for AMR-Guard Workflow."""
 
 from .antibiotic_tools import (
     query_antibiotic_info,

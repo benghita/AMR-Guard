@@ -1,4 +1,4 @@
-"""Data import scripts for Med-I-C structured documents."""
+"""Data import scripts for AMR-Guard structured documents."""
 
 import pandas as pd
 from pathlib import Path
@@ -352,7 +352,7 @@ def import_drug_interactions(limit: int = None) -> int:
 def import_all_data(interactions_limit: int = None) -> dict:
     """Initialize the database and import all structured data sources."""
     print(f"\n{'='*50}")
-    print("Med-I-C Data Import")
+    print("AMR-Guard Data Import")
     print(f"{'='*50}\n")
 
     init_database()

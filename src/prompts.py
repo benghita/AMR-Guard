@@ -1,4 +1,4 @@
-"""Prompt templates for each agent in the Med-I-C pipeline."""
+"""Prompt templates for each agent in the AMR-Guard pipeline."""
 
 
 # --- Agent 1: Intake Historian ---
