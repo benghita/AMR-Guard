@@ -621,9 +621,9 @@ _s = get_settings()
 OVERVIEW_MODELS_MD = f"""
 | Agent | Role | Model |
 |---|---|---|
-| 1, 2, 4 | Clinical reasoning | `{_s.local_medgemma_4b_model or "google/medgemma-4b-it"}` |
-| 3 | Trend analysis | `{_s.local_medgemma_27b_model or "google/medgemma-27b-text-it"}` |
-| 4 (safety) | Pharmacology check | `{_s.local_txgemma_9b_model or "google/txgemma-9b-predict"}` |
+| 1, 2, 4 | Clinical reasoning | `{_s.medgemma_4b_model or "google/medgemma-4b-it"}` |
+| 3 | Trend analysis | `{_s.medgemma_27b_model or "google/medgemma-27b-text-it"}` |
+| 4 (safety) | Pharmacology check | `{_s.txgemma_9b_model or "google/txgemma-9b-predict"}` |
 | — | Semantic retrieval | `{_s.embedding_model_name}` |
 | — | Inference backend | HuggingFace Transformers · {_s.quantization} quant |
 """
