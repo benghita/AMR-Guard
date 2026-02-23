@@ -13,7 +13,7 @@ if os.environ.get("SPACE_ID"):
     try:
         import spaces as _spaces
         try:
-            _gpu = _spaces.GPU(duration=120)
+            _gpu = _spaces.GPU(duration=600)
         except TypeError:
             _gpu = _spaces.GPU  # older spaces API without duration param
     except ImportError:
@@ -267,7 +267,12 @@ def run_inference(
         return _run_inference_gpu(prompt, model_name, max_new_tokens, temperature, **kwargs)
     except Exception as e:
         if _is_zerogpu_error(e):
-            logger.warning("ZeroGPU unavailable (%s: %s) — retrying on CPU", type(e).__name__, e)
+            logger.warning("ZeroGPU unavailable (%s: %s) — clearing model cache and retrying on CPU", type(e).__name__, e)
+            # Cached models point to an expired GPU context — evict them so
+            # the CPU retry loads fresh weights onto CPU memory.
+            get_text_model.cache_clear()
+            _get_local_multimodal.cache_clear()
+            _get_local_causal_lm.cache_clear()
             try:
                 return _inference_core(prompt, model_name, max_new_tokens, temperature, **kwargs)
             except Exception as cpu_err:
@@ -296,7 +301,10 @@ def run_inference_with_image(
         return _run_inference_with_image_gpu(prompt, image, model_name, max_new_tokens, temperature, **kwargs)
     except Exception as e:
         if _is_zerogpu_error(e):
-            logger.warning("ZeroGPU unavailable (%s: %s) — retrying vision inference on CPU", type(e).__name__, e)
+            logger.warning("ZeroGPU unavailable (%s: %s) — clearing model cache and retrying vision inference on CPU", type(e).__name__, e)
+            get_text_model.cache_clear()
+            _get_local_multimodal.cache_clear()
+            _get_local_causal_lm.cache_clear()
             try:
                 return _inference_with_image_core(prompt, image, model_name, max_new_tokens, temperature, **kwargs)
             except Exception as cpu_err:
