@@ -128,57 +128,96 @@ CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 body, .gradio-container { font-family: 'Inter', sans-serif !important; }
 
+/* ── Banner ── */
 .med-banner {
-    background: linear-gradient(135deg, #0b2545 0%, #1a4a8a 100%);
-    padding: 22px 30px; border-radius: 12px; margin-bottom: 20px;
+    background: linear-gradient(135deg, #020d1f 0%, #0b2545 55%, #102f62 100%);
+    padding: 24px 32px; border-radius: 14px; margin-bottom: 22px;
+    border: 1px solid #1e4a80;
+    box-shadow: 0 0 48px rgba(26,74,138,0.45), inset 0 1px 0 rgba(158,196,240,0.12);
 }
-.med-banner h1 { color: #fff; font-size: 1.9rem; font-weight: 700; margin: 0; }
-.med-banner p  { color: #9ec4f0; font-size: 0.95rem; margin: 4px 0 0; }
+.med-banner h1 {
+    color: #ffffff; font-size: 1.95rem; font-weight: 700; margin: 0;
+    text-shadow: 0 0 24px rgba(96,196,255,0.45);
+}
+.med-banner p  { color: #7eb8e8; font-size: 0.95rem; margin: 5px 0 0; }
 
+/* ── Section titles ── */
 .section-title {
-    font-size: 1.1rem; font-weight: 600; color: #6b8fc4;
-    border-bottom: 2px solid #1a4a8a; padding-bottom: 6px; margin: 16px 0 12px;
+    font-size: 0.8rem; font-weight: 700; color: #60b4ff;
+    border-bottom: 1px solid #1e3f72; padding-bottom: 6px; margin: 18px 0 13px;
+    text-transform: uppercase; letter-spacing: 0.1em;
 }
 
+/* ── Stat cards ── */
 .stat-cards {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 22px;
 }
 .stat-card {
-    background: #fff; border: 1px solid #dde4ee; border-top: 3px solid #1a4a8a;
-    border-radius: 10px; padding: 18px 20px; text-align: center;
+    background: linear-gradient(160deg, #0b1e3d 0%, #0e2a56 100%);
+    border: 1px solid #1e4a80; border-top: 3px solid #3b82f6;
+    border-radius: 11px; padding: 18px 20px; text-align: center;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.35);
 }
-.stat-card .label { color: #6b7a99; font-size: 0.78rem; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.04em; }
-.stat-card .value { color: #0b2545; font-size: 1.6rem; font-weight: 700; margin-top: 4px; }
-.stat-card .sub   { color: #9ec4f0; font-size: 0.75rem; margin-top: 2px; }
+.stat-card .label {
+    color: #7eaadb; font-size: 0.78rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em;
+}
+.stat-card .value { color: #60c8ff; font-size: 1.65rem; font-weight: 700; margin-top: 5px; }
+.stat-card .sub   { color: #a8cce8; font-size: 0.75rem; margin-top: 3px; }
 
+/* ── Agent steps ── */
 .agent-step {
-    background: #f4f7fc; border-left: 4px solid #1a4a8a;
+    background: linear-gradient(135deg, #091a36 0%, #0d2450 100%);
+    border: 1px solid #1e4278; border-left: 4px solid #3b82f6;
     border-radius: 8px; padding: 14px 16px; margin-bottom: 10px;
 }
-.agent-step .num  { color: #1a4a8a; font-weight: 700; font-size: 0.85rem; }
-.agent-step .name { color: #0b2545; font-weight: 600; }
-.agent-step .desc { color: #5a6680; font-size: 0.85rem; margin-top: 4px; }
+.agent-step .num  { color: #60b4ff; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.04em; }
+.agent-step .name { color: #dceeff; font-weight: 600; }
+.agent-step .desc { color: #8ab4d8; font-size: 0.85rem; margin-top: 4px; }
 
-.badge-high     { background:#fff0f0; border-left:4px solid #c0392b; color:#7b1d1d;
-    padding:10px 14px; border-radius:6px; margin-bottom:6px; }
-.badge-moderate { background:#fff8ee; border-left:4px solid #e67e22; color:#7a4a00;
-    padding:10px 14px; border-radius:6px; margin-bottom:6px; }
-.badge-low      { background:#f0fff4; border-left:4px solid #27ae60; color:#145a32;
-    padding:10px 14px; border-radius:6px; margin-bottom:6px; }
-.badge-info     { background:#eaf3ff; border-left:4px solid #1a4a8a; color:#0b2545;
-    padding:10px 14px; border-radius:6px; margin-bottom:6px; }
-
-.rx-card {
-    background: #f4f7fc; border: 1px solid #c5d3e8; border-radius: 10px;
-    padding: 22px 24px; font-size: 0.9rem; line-height: 1.7;
+/* ── Status badges — dark backgrounds, high-contrast text ── */
+.badge-high {
+    background: #1e0707; border-left: 4px solid #dc2626; color: #fca5a5;
+    padding: 10px 14px; border-radius: 7px; margin-bottom: 6px;
 }
-.rx-card .rx-symbol { font-size: 2rem; color: #1a4a8a; font-weight: 700; }
-.rx-card .rx-drug   { font-size: 1.2rem; font-weight: 700; color: #0b2545; }
+.badge-moderate {
+    background: #1c1200; border-left: 4px solid #d97706; color: #fcd34d;
+    padding: 10px 14px; border-radius: 7px; margin-bottom: 6px;
+}
+.badge-low {
+    background: #021a0e; border-left: 4px solid #16a34a; color: #86efac;
+    padding: 10px 14px; border-radius: 7px; margin-bottom: 6px;
+}
+.badge-info {
+    background: #071428; border-left: 4px solid #2563eb; color: #93c5fd;
+    padding: 10px 14px; border-radius: 7px; margin-bottom: 6px;
+}
 
+/* ── Prescription card ── */
+.rx-card {
+    background: linear-gradient(145deg, #081730 0%, #0c2248 100%);
+    border: 1px solid #1e4a80; border-radius: 12px;
+    padding: 24px 26px; font-size: 0.9rem; line-height: 1.75; color: #cce3ff;
+    box-shadow: 0 6px 28px rgba(0,0,0,0.45), 0 0 0 1px rgba(59,130,246,0.18);
+}
+.rx-card .rx-symbol {
+    font-size: 2.2rem; color: #60c8ff; font-weight: 700;
+    text-shadow: 0 0 14px rgba(96,200,255,0.55);
+}
+.rx-card .rx-drug   { font-size: 1.25rem; font-weight: 700; color: #ffffff; }
+.rx-card strong     { color: #a8d4ff; }
+.rx-card ul         { color: #cce3ff; }
+
+/* ── Badge child elements inherit color ── */
+.badge-high strong,   .badge-high em,   .badge-high span   { color: inherit; }
+.badge-moderate strong,.badge-moderate em,.badge-moderate span { color: inherit; }
+.badge-low strong,    .badge-low em,    .badge-low span    { color: inherit; }
+.badge-info strong,   .badge-info em,   .badge-info span   { color: inherit; }
+
+/* ── Disclaimer ── */
 .disclaimer {
-    background: #fff8ee; border: 1px solid #f0c080; border-radius: 8px;
-    padding: 12px 16px; font-size: 0.78rem; color: #7a5000; margin-top: 20px;
+    background: #150e00; border: 1px solid #78450e; border-radius: 8px;
+    padding: 12px 16px; font-size: 0.78rem; color: #fbbf24; margin-top: 20px;
 }
 """
 
@@ -282,7 +321,7 @@ def _build_lab_html_and_df(result: dict) -> tuple[str, pd.DataFrame]:
             html += f"<strong>Specimen:</strong> {v['specimen_type'].capitalize()}<br>"
         if v.get("extraction_confidence") is not None:
             conf  = float(v["extraction_confidence"])
-            color = "#27ae60" if conf >= 0.85 else "#e67e22" if conf >= 0.6 else "#c0392b"
+            color = "#86efac" if conf >= 0.85 else "#fcd34d" if conf >= 0.6 else "#fca5a5"
             html += (f'<div class="badge-info">Extraction confidence: '
                      f'<span style="color:{color};font-weight:700">{conf:.0%}</span></div>')
         orgs = v.get("identified_organisms", [])
@@ -952,10 +991,10 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="AMR-Guard") as demo:
                         )
                     with gr.Column(scale=1):
                         gr.HTML("""
-<div class="badge-info"><strong>WHO AWaRe</strong><br>
-<span style="color:#145a32">●</span> Access — first-line<br>
-<span style="color:#7a4a00">●</span> Watch — second-line<br>
-<span style="color:#7b1d1d">●</span> Reserve — last resort</div>""")
+<div class="badge-info"><strong style="color:#dceeff">WHO AWaRe</strong><br>
+<span style="color:#86efac">●</span> Access — first-line<br>
+<span style="color:#fcd34d">●</span> Watch — second-line<br>
+<span style="color:#fca5a5">●</span> Reserve — last resort</div>""")
                 ea_btn = gr.Button("Get recommendation", variant="primary")
                 ea_out = gr.HTML()
 
