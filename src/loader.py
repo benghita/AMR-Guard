@@ -170,9 +170,21 @@ def get_text_model(
 
 
 def _is_zerogpu_error(e: Exception) -> bool:
-    """Return True for errors that indicate ZeroGPU failed to allocate / init a GPU."""
+    """Return True for errors that indicate ZeroGPU failed to allocate / init a GPU.
+
+    The spaces package re-wraps the original CUDA RuntimeError as
+    RuntimeError('RuntimeError'), so we check for that pattern too.
+    """
+    import traceback as _tb
     msg = str(e)
-    return "No CUDA GPUs are available" in msg or "CUDA" in msg
+    if "No CUDA GPUs are available" in msg or "CUDA" in msg:
+        return True
+    # spaces re-wraps: RuntimeError('RuntimeError')
+    if msg == "RuntimeError":
+        return True
+    # Inspect traceback for ZeroGPU stack frames
+    full_tb = "".join(_tb.format_exception(type(e), e, e.__traceback__))
+    return "spaces/zero" in full_tb or "device-api.zero" in full_tb
 
 
 def _inference_core(
