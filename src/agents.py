@@ -70,7 +70,7 @@ def run_intake_historian(state: InfectionState) -> InfectionState:
         f"- {k.replace('_', ' ').title()}: {v}" for k, v in state.get("vitals", {}).items()
     ) or "None provided"
 
-    prompt = f"{INTAKE_HISTORIAN_SYSTEM}\n\n{INTAKE_HISTORIAN_PROMPT.format(
+    prompt = INTAKE_HISTORIAN_SYSTEM + "\n\n" + INTAKE_HISTORIAN_PROMPT.format(
         patient_data=patient_data,
         medications=', '.join(state.get('medications', [])) or 'None reported',
         allergies=', '.join(state.get('allergies', [])) or 'No known allergies',
@@ -78,7 +78,7 @@ def run_intake_historian(state: InfectionState) -> InfectionState:
         suspected_source=state.get('suspected_source', 'Unknown'),
         site_vitals=site_vitals_str,
         rag_context=rag_context,
-    )}"
+    )
 
     try:
         response = run_inference(prompt=prompt, model_name="medgemma_4b", max_new_tokens=1024, temperature=0.2)
@@ -134,11 +134,11 @@ def run_vision_specialist(state: InfectionState) -> InfectionState:
         patient_context={},
     )
 
-    prompt = f"{VISION_SPECIALIST_SYSTEM}\n\n{VISION_SPECIALIST_PROMPT.format(
+    prompt = VISION_SPECIALIST_SYSTEM + "\n\n" + VISION_SPECIALIST_PROMPT.format(
         report_content=report_content,
         source_format=source_format,
         language=language,
-    )}"
+    )
 
     try:
         if labs_image_bytes:
@@ -226,13 +226,13 @@ def run_trend_analyst(state: InfectionState) -> InfectionState:
         # Single time-point history — trend analysis requires historical data in production
         mic_history = [{"date": "current", "mic_value": mic.get("mic_value", "0")}]
 
-        prompt = f"{TREND_ANALYST_SYSTEM}\n\n{TREND_ANALYST_PROMPT.format(
+        prompt = TREND_ANALYST_SYSTEM + "\n\n" + TREND_ANALYST_PROMPT.format(
             organism=organism,
             antibiotic=antibiotic,
             mic_history=json.dumps(mic_history, indent=2),
             breakpoint_data=rag_context,
             resistance_context='Regional data not available',
-        )}"
+        )
 
         try:
             # Agent 3 is designed for MedGemma 27B; on limited GPU the env var maps this to 4B
@@ -284,7 +284,7 @@ def run_clinical_pharmacologist(state: InfectionState) -> InfectionState:
         f"- {k.replace('_', ' ').title()}: {v}" for k, v in state.get("vitals", {}).items()
     ) or "None provided"
 
-    prompt = f"{CLINICAL_PHARMACOLOGIST_SYSTEM}\n\n{CLINICAL_PHARMACOLOGIST_PROMPT.format(
+    prompt = CLINICAL_PHARMACOLOGIST_SYSTEM + "\n\n" + CLINICAL_PHARMACOLOGIST_PROMPT.format(
         intake_summary=intake_summary,
         lab_results=lab_results,
         trend_analysis=trend_analysis,
@@ -298,7 +298,7 @@ def run_clinical_pharmacologist(state: InfectionState) -> InfectionState:
         severity=state.get('intake_notes', {}).get('infection_severity', 'Unknown') if isinstance(state.get('intake_notes'), dict) else 'Unknown',
         site_vitals=site_vitals_str,
         rag_context=rag_context,
-    )}"
+    )
 
     try:
         response = run_inference(prompt=prompt, model_name="medgemma_4b", max_new_tokens=2048, temperature=0.2)
