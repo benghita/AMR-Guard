@@ -514,6 +514,7 @@ def run_pipeline_ui(
         ["Intake Historian", "Vision Specialist", "Trend Analyst", "Clinical Pharmacologist"]
         if has_labs else ["Intake Historian", "Clinical Pharmacologist"]
     )
+
     for i, name in enumerate(stages):
         progress((i + 0.5) / len(stages), desc=f"Running: {name}…")
 
@@ -875,7 +876,17 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="AMR-Guard") as demo:
                 inputs=[lab_method],
                 outputs=[lab_file, lab_paste],
             )
+            _loading_html = '<div class="badge-info" style="padding:16px;text-align:center;">⏳ Pipeline running — please wait…</div>'
             run_btn.click(
+                fn=lambda: (
+                    _loading_html, _loading_html, _loading_html,
+                    pd.DataFrame(), _loading_html,
+                    gr.update(visible=True),
+                ),
+                inputs=[],
+                outputs=[rec_out, intake_out, lab_html_out, lab_df_out, safety_out, results_group],
+                queue=False,
+            ).then(
                 fn=run_pipeline_ui,
                 inputs=[
                     age, weight, height, sex,
