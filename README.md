@@ -6,6 +6,7 @@ colorTo: indigo
 sdk: gradio
 sdk_version: "5.25.0"
 python_version: "3.12"
+hardware: zero-gpu
 pinned: true
 license: apache-2.0
 tags:

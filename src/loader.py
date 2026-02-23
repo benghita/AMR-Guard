@@ -172,15 +172,20 @@ def get_text_model(
 def _is_zerogpu_error(e: Exception) -> bool:
     """Return True for errors that indicate ZeroGPU failed to allocate / init a GPU.
 
-    The spaces package re-wraps the original CUDA RuntimeError as
-    RuntimeError('RuntimeError'), so we check for that pattern too.
+    The spaces package raises ZeroGPUException (not RuntimeError) in newer versions,
+    and re-wraps the original CUDA RuntimeError as RuntimeError('RuntimeError') in
+    older versions, so we check for multiple patterns.
     """
     import traceback as _tb
+    # Check exception class name — spaces raises ZeroGPUException in newer versions
+    cls_name = type(e).__name__
+    if "ZeroGPU" in cls_name or "GPU" in cls_name:
+        return True
     msg = str(e)
     if "No CUDA GPUs are available" in msg or "CUDA" in msg:
         return True
-    # spaces re-wraps: RuntimeError('RuntimeError')
-    if msg == "RuntimeError":
+    # spaces re-wraps with the type name: RuntimeError("'RuntimeError'") or RuntimeError("RuntimeError")
+    if "RuntimeError" in msg:
         return True
     # Inspect traceback for ZeroGPU stack frames
     full_tb = "".join(_tb.format_exception(type(e), e, e.__traceback__))
@@ -260,10 +265,14 @@ def run_inference(
     logger.info(f"Running inference with {model_name}, max_tokens={max_new_tokens}, temp={temperature}")
     try:
         return _run_inference_gpu(prompt, model_name, max_new_tokens, temperature, **kwargs)
-    except RuntimeError as e:
+    except Exception as e:
         if _is_zerogpu_error(e):
-            logger.warning("ZeroGPU unavailable (%s) — retrying on CPU", e)
-            return _inference_core(prompt, model_name, max_new_tokens, temperature, **kwargs)
+            logger.warning("ZeroGPU unavailable (%s: %s) — retrying on CPU", type(e).__name__, e)
+            try:
+                return _inference_core(prompt, model_name, max_new_tokens, temperature, **kwargs)
+            except Exception as cpu_err:
+                logger.error(f"CPU fallback also failed for {model_name}: {cpu_err}", exc_info=True)
+                raise
         logger.error(f"Inference failed for {model_name}: {e}", exc_info=True)
         raise
 
@@ -285,10 +294,14 @@ def run_inference_with_image(
     logger.info(f"Running vision inference with {model_name}, max_tokens={max_new_tokens}")
     try:
         return _run_inference_with_image_gpu(prompt, image, model_name, max_new_tokens, temperature, **kwargs)
-    except RuntimeError as e:
+    except Exception as e:
         if _is_zerogpu_error(e):
-            logger.warning("ZeroGPU unavailable (%s) — retrying vision inference on CPU", e)
-            return _inference_with_image_core(prompt, image, model_name, max_new_tokens, temperature, **kwargs)
+            logger.warning("ZeroGPU unavailable (%s: %s) — retrying vision inference on CPU", type(e).__name__, e)
+            try:
+                return _inference_with_image_core(prompt, image, model_name, max_new_tokens, temperature, **kwargs)
+            except Exception as cpu_err:
+                logger.error(f"CPU vision fallback also failed for {model_name}: {cpu_err}", exc_info=True)
+                raise
         logger.error(f"Vision inference failed for {model_name}: {e}", exc_info=True)
         raise
 
