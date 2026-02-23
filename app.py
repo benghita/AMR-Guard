@@ -87,7 +87,32 @@ except Exception:
 
 from src.config import get_settings
 from src.form_config import CREATININE_PROMINENT_SITES, SITE_SPECIFIC_FIELDS, SUSPECTED_SOURCE_OPTIONS
-from src.loader import run_inference  # noqa: F401 – registers @spaces.GPU with ZeroGPU at startup
+from src.loader import run_inference  # noqa: F401 – triggers spaces import / ZeroGPU registration at startup
+
+# ── Single GPU session for the full multi-agent pipeline ──────────────────────
+# Each run_inference call uses lru_cache'd model weights.  ZeroGPU frees GPU
+# memory when a @spaces.GPU function returns, so wrapping every individual
+# inference call in its own GPU session would invalidate the cached model
+# between agents, causing model.generate() to hang on freed CUDA memory.
+# Wrapping the *entire* pipeline in one session keeps the CUDA context alive
+# for all four agents, so the model is loaded once and stays valid throughout.
+if os.environ.get("SPACE_ID"):
+    try:
+        import spaces as _spaces_ui
+
+        @_spaces_ui.GPU(duration=600)
+        def _run_pipeline_gpu(patient_data: dict, labs_raw_text):
+            from src.graph import run_pipeline
+            return run_pipeline(patient_data, labs_raw_text)
+    except ImportError:
+        def _run_pipeline_gpu(patient_data: dict, labs_raw_text):
+            from src.graph import run_pipeline
+            return run_pipeline(patient_data, labs_raw_text)
+else:
+    def _run_pipeline_gpu(patient_data: dict, labs_raw_text):
+        from src.graph import run_pipeline
+        return run_pipeline(patient_data, labs_raw_text)
+
 from src.tools import (
     calculate_mic_trend,
     get_empirical_therapy_guidance,
@@ -519,8 +544,7 @@ def run_pipeline_ui(
         progress((i + 0.5) / len(stages), desc=f"Running: {name}…")
 
     try:
-        from src.graph import run_pipeline
-        result = run_pipeline(patient_data, labs_raw_text)
+        result = _run_pipeline_gpu(patient_data, labs_raw_text)
     except Exception as e:
         tb = traceback.format_exc()
         logger.error("Pipeline failed — falling back to demo result.\n%s", tb)

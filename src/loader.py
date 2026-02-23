@@ -6,20 +6,20 @@ from typing import Any, Callable, Dict, Literal, Optional
 
 from .config import get_settings
 
-# ── ZeroGPU decorator (HF Spaces only) ────────────────────────────────────────
-# ZeroGPU default duration is 60 s — too short for 4B model load + inference.
-# We request 120 s; fall back gracefully if the spaces version lacks `duration`.
+# ── ZeroGPU registration (HF Spaces only) ────────────────────────────────────
+# Calling spaces.GPU() at import time establishes the connection with the
+# ZeroGPU daemon.  The actual @spaces.GPU decorator for the pipeline lives in
+# app.py and wraps the *entire* multi-agent run so all agents share one GPU
+# session (avoids lru_cache + freed-CUDA-memory hangs between agent calls).
 if os.environ.get("SPACE_ID"):
     try:
         import spaces as _spaces
         try:
-            _gpu = _spaces.GPU(duration=600)
+            _spaces.GPU(duration=600)  # register with ZeroGPU daemon at startup
         except TypeError:
-            _gpu = _spaces.GPU  # older spaces API without duration param
+            pass  # older spaces without duration param — registration still happens
     except ImportError:
-        _gpu = lambda f: f  # noqa: E731
-else:
-    _gpu = lambda f: f  # noqa: E731
+        pass
 
 logger = logging.getLogger(__name__)
 
@@ -169,28 +169,6 @@ def get_text_model(
     return _get_local_causal_lm(model_name)
 
 
-def _is_zerogpu_error(e: Exception) -> bool:
-    """Return True for errors that indicate ZeroGPU failed to allocate / init a GPU.
-
-    The spaces package raises ZeroGPUException (not RuntimeError) in newer versions,
-    and re-wraps the original CUDA RuntimeError as RuntimeError('RuntimeError') in
-    older versions, so we check for multiple patterns.
-    """
-    import traceback as _tb
-    # Check exception class name — spaces raises ZeroGPUException in newer versions
-    cls_name = type(e).__name__
-    if "ZeroGPU" in cls_name or "GPU" in cls_name:
-        return True
-    msg = str(e)
-    if "No CUDA GPUs are available" in msg or "CUDA" in msg:
-        return True
-    # spaces re-wraps with the type name: RuntimeError("'RuntimeError'") or RuntimeError("RuntimeError")
-    if "RuntimeError" in msg:
-        return True
-    # Inspect traceback for ZeroGPU stack frames
-    full_tb = "".join(_tb.format_exception(type(e), e, e.__traceback__))
-    return "spaces/zero" in full_tb or "device-api.zero" in full_tb
-
 
 def _inference_core(
     prompt: str,
@@ -231,29 +209,6 @@ def _inference_with_image_core(
     return result
 
 
-@_gpu
-def _run_inference_gpu(
-    prompt: str,
-    model_name: TextModelName = "medgemma_4b",
-    max_new_tokens: int = 512,
-    temperature: float = 0.2,
-    **kwargs: Any,
-) -> str:
-    return _inference_core(prompt, model_name, max_new_tokens, temperature, **kwargs)
-
-
-@_gpu
-def _run_inference_with_image_gpu(
-    prompt: str,
-    image: Any,
-    model_name: TextModelName = "medgemma_4b",
-    max_new_tokens: int = 1024,
-    temperature: float = 0.1,
-    **kwargs: Any,
-) -> str:
-    return _inference_with_image_core(prompt, image, model_name, max_new_tokens, temperature, **kwargs)
-
-
 def run_inference(
     prompt: str,
     model_name: TextModelName = "medgemma_4b",
@@ -261,25 +216,14 @@ def run_inference(
     temperature: float = 0.2,
     **kwargs: Any,
 ) -> str:
-    """Run inference with the specified model. Tries ZeroGPU first, falls back to CPU."""
+    """Run inference with the specified model.
+
+    Must be called from within an active @spaces.GPU context (e.g. the
+    pipeline wrapper in app.py).  All agents share one GPU session so that
+    the lru_cache'd model stays valid across the full pipeline.
+    """
     logger.info(f"Running inference with {model_name}, max_tokens={max_new_tokens}, temp={temperature}")
-    try:
-        return _run_inference_gpu(prompt, model_name, max_new_tokens, temperature, **kwargs)
-    except Exception as e:
-        if _is_zerogpu_error(e):
-            logger.warning("ZeroGPU unavailable (%s: %s) — clearing model cache and retrying on CPU", type(e).__name__, e)
-            # Cached models point to an expired GPU context — evict them so
-            # the CPU retry loads fresh weights onto CPU memory.
-            get_text_model.cache_clear()
-            _get_local_multimodal.cache_clear()
-            _get_local_causal_lm.cache_clear()
-            try:
-                return _inference_core(prompt, model_name, max_new_tokens, temperature, **kwargs)
-            except Exception as cpu_err:
-                logger.error(f"CPU fallback also failed for {model_name}: {cpu_err}", exc_info=True)
-                raise
-        logger.error(f"Inference failed for {model_name}: {e}", exc_info=True)
-        raise
+    return _inference_core(prompt, model_name, max_new_tokens, temperature, **kwargs)
 
 
 def run_inference_with_image(
@@ -290,27 +234,12 @@ def run_inference_with_image(
     temperature: float = 0.1,
     **kwargs: Any,
 ) -> str:
-    """
-    Run vision-language inference passing a PIL image alongside the text prompt.
+    """Run vision-language inference passing a PIL image alongside the text prompt.
 
-    Falls back to text-only inference if the resolved model is not multimodal.
-    Tries ZeroGPU first, falls back to CPU on ZeroGPU init failure.
+    Falls back to text-only if the resolved model is not multimodal.
+    Must be called from within an active @spaces.GPU context.
     """
     logger.info(f"Running vision inference with {model_name}, max_tokens={max_new_tokens}")
-    try:
-        return _run_inference_with_image_gpu(prompt, image, model_name, max_new_tokens, temperature, **kwargs)
-    except Exception as e:
-        if _is_zerogpu_error(e):
-            logger.warning("ZeroGPU unavailable (%s: %s) — clearing model cache and retrying vision inference on CPU", type(e).__name__, e)
-            get_text_model.cache_clear()
-            _get_local_multimodal.cache_clear()
-            _get_local_causal_lm.cache_clear()
-            try:
-                return _inference_with_image_core(prompt, image, model_name, max_new_tokens, temperature, **kwargs)
-            except Exception as cpu_err:
-                logger.error(f"CPU vision fallback also failed for {model_name}: {cpu_err}", exc_info=True)
-                raise
-        logger.error(f"Vision inference failed for {model_name}: {e}", exc_info=True)
-        raise
+    return _inference_with_image_core(prompt, image, model_name, max_new_tokens, temperature, **kwargs)
 
 
