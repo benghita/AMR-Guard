@@ -169,7 +169,74 @@ def get_text_model(
     return _get_local_causal_lm(model_name)
 
 
+def _is_zerogpu_error(e: Exception) -> bool:
+    """Return True for errors that indicate ZeroGPU failed to allocate / init a GPU."""
+    msg = str(e)
+    return "No CUDA GPUs are available" in msg or "CUDA" in msg
+
+
+def _inference_core(
+    prompt: str,
+    model_name: TextModelName = "medgemma_4b",
+    max_new_tokens: int = 512,
+    temperature: float = 0.2,
+    **kwargs: Any,
+) -> str:
+    """Core text inference — no GPU decorator, runs on whatever device is available."""
+    model = get_text_model(model_name=model_name)
+    logger.info(f"Model {model_name} ready")
+    result = model(prompt, max_new_tokens=max_new_tokens, temperature=temperature, **kwargs)
+    logger.info(f"Inference complete, response length: {len(result)} chars")
+    return result
+
+
+def _inference_with_image_core(
+    prompt: str,
+    image: Any,
+    model_name: TextModelName = "medgemma_4b",
+    max_new_tokens: int = 1024,
+    temperature: float = 0.1,
+    **kwargs: Any,
+) -> str:
+    """Core vision inference — no GPU decorator, runs on whatever device is available."""
+    model_path = _get_model_path(model_name)
+    if not _is_multimodal(model_path):
+        logger.warning(
+            f"{model_name} ({model_path}) is not a multimodal model; "
+            "falling back to text-only inference."
+        )
+        return _inference_core(prompt, model_name, max_new_tokens, temperature, **kwargs)
+    model_fn = _get_local_multimodal(model_name)
+    result = model_fn(
+        prompt, max_new_tokens=max_new_tokens, temperature=temperature, image=image, **kwargs
+    )
+    logger.info(f"Vision inference complete, response length: {len(result)} chars")
+    return result
+
+
 @_gpu
+def _run_inference_gpu(
+    prompt: str,
+    model_name: TextModelName = "medgemma_4b",
+    max_new_tokens: int = 512,
+    temperature: float = 0.2,
+    **kwargs: Any,
+) -> str:
+    return _inference_core(prompt, model_name, max_new_tokens, temperature, **kwargs)
+
+
+@_gpu
+def _run_inference_with_image_gpu(
+    prompt: str,
+    image: Any,
+    model_name: TextModelName = "medgemma_4b",
+    max_new_tokens: int = 1024,
+    temperature: float = 0.1,
+    **kwargs: Any,
+) -> str:
+    return _inference_with_image_core(prompt, image, model_name, max_new_tokens, temperature, **kwargs)
+
+
 def run_inference(
     prompt: str,
     model_name: TextModelName = "medgemma_4b",
@@ -177,20 +244,18 @@ def run_inference(
     temperature: float = 0.2,
     **kwargs: Any,
 ) -> str:
-    """Run inference with the specified model. This is the primary entry point for agents."""
+    """Run inference with the specified model. Tries ZeroGPU first, falls back to CPU."""
     logger.info(f"Running inference with {model_name}, max_tokens={max_new_tokens}, temp={temperature}")
     try:
-        model = get_text_model(model_name=model_name)
-        logger.info(f"Model {model_name} loaded successfully")
-        result = model(prompt, max_new_tokens=max_new_tokens, temperature=temperature, **kwargs)
-        logger.info(f"Inference complete, response length: {len(result)} chars")
-        return result
-    except Exception as e:
+        return _run_inference_gpu(prompt, model_name, max_new_tokens, temperature, **kwargs)
+    except RuntimeError as e:
+        if _is_zerogpu_error(e):
+            logger.warning("ZeroGPU unavailable (%s) — retrying on CPU", e)
+            return _inference_core(prompt, model_name, max_new_tokens, temperature, **kwargs)
         logger.error(f"Inference failed for {model_name}: {e}", exc_info=True)
         raise
 
 
-@_gpu
 def run_inference_with_image(
     prompt: str,
     image: Any,  # PIL.Image.Image
@@ -202,25 +267,17 @@ def run_inference_with_image(
     """
     Run vision-language inference passing a PIL image alongside the text prompt.
 
-    Falls back to text-only inference if the resolved model is not multimodal
-    (e.g. when medgemma_4b is remapped to a text-only model in the env config).
+    Falls back to text-only inference if the resolved model is not multimodal.
+    Tries ZeroGPU first, falls back to CPU on ZeroGPU init failure.
     """
     logger.info(f"Running vision inference with {model_name}, max_tokens={max_new_tokens}")
     try:
-        model_path = _get_model_path(model_name)
-        if not _is_multimodal(model_path):
-            logger.warning(
-                f"{model_name} ({model_path}) is not a multimodal model; "
-                "falling back to text-only inference."
-            )
-            return run_inference(prompt, model_name, max_new_tokens, temperature, **kwargs)
-
-        model_fn = _get_local_multimodal(model_name)
-        result = model_fn(
-            prompt, max_new_tokens=max_new_tokens, temperature=temperature, image=image, **kwargs
-        )
-        logger.info(f"Vision inference complete, response length: {len(result)} chars")
-        return result
-    except Exception as e:
+        return _run_inference_with_image_gpu(prompt, image, model_name, max_new_tokens, temperature, **kwargs)
+    except RuntimeError as e:
+        if _is_zerogpu_error(e):
+            logger.warning("ZeroGPU unavailable (%s) — retrying vision inference on CPU", e)
+            return _inference_with_image_core(prompt, image, model_name, max_new_tokens, temperature, **kwargs)
         logger.error(f"Vision inference failed for {model_name}: {e}", exc_info=True)
         raise
+
+
