@@ -7,10 +7,15 @@ from typing import Any, Callable, Dict, Literal, Optional
 from .config import get_settings
 
 # ── ZeroGPU decorator (HF Spaces only) ────────────────────────────────────────
+# ZeroGPU default duration is 60 s — too short for 4B model load + inference.
+# We request 120 s; fall back gracefully if the spaces version lacks `duration`.
 if os.environ.get("SPACE_ID"):
     try:
         import spaces as _spaces
-        _gpu = _spaces.GPU
+        try:
+            _gpu = _spaces.GPU(duration=120)
+        except TypeError:
+            _gpu = _spaces.GPU  # older spaces API without duration param
     except ImportError:
         _gpu = lambda f: f  # noqa: E731
 else:
@@ -46,11 +51,15 @@ def _get_model_path(model_name: TextModelName) -> str:
 
 
 def _get_load_kwargs() -> Dict[str, Any]:
+    import torch
     settings = get_settings()
+    has_cuda = torch.cuda.is_available()
     load_kwargs: Dict[str, Any] = {"device_map": "auto"}
-    if settings.quantization == "4bit":
+    if settings.quantization == "4bit" and has_cuda:
         from transformers import BitsAndBytesConfig
         load_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
+    elif not has_cuda:
+        logger.warning("No CUDA GPU detected — loading model in float32 on CPU (inference will be slow)")
     return load_kwargs
 
 
@@ -137,6 +146,7 @@ def _get_local_causal_lm(model_name: TextModelName):
     return _call
 
 
+@lru_cache(maxsize=8)
 def _is_multimodal(model_path: str) -> bool:
     """Check if a model uses a multimodal architecture by inspecting its config."""
     from transformers import AutoConfig
