@@ -4,14 +4,26 @@ Infection Lifecycle Orchestrator · Multi-Agent Clinical Decision Support
 """
 
 import json
+import logging
 import os
 import subprocess
 import sys
+import traceback
 from io import BytesIO
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+# Configure logging early so all module-level loggers emit to stdout.
+# force=True reconfigures the root logger even if already set by an import.
+logging.basicConfig(
+    level=logging.INFO,
+    stream=sys.stdout,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    force=True,
+)
+logger = logging.getLogger(__name__)
 
 # ── huggingface_hub compatibility shim ───────────────────────────────────────
 # Older gradio versions (pre-5.7) import HfFolder from huggingface_hub in
@@ -508,8 +520,12 @@ def run_pipeline_ui(
     try:
         from src.graph import run_pipeline
         result = run_pipeline(patient_data, labs_raw_text)
-    except Exception:
+    except Exception as e:
+        tb = traceback.format_exc()
+        logger.error("Pipeline failed — falling back to demo result.\n%s", tb)
         result = _demo_result(patient_data, has_labs)
+        result["errors"].append(f"Pipeline error: {e}")
+        result["recommendation"] = {}  # suppress the hardcoded drug from showing
 
     progress(1.0, desc="Complete")
 
