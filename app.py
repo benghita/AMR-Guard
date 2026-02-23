@@ -45,10 +45,10 @@ if os.environ.get("SPACE_ID") and not _DB_PATH.exists():
 import gradio as gr
 import pandas as pd
 
-# ── Gradio 5.0.0 boolean-schema patch ────────────────────────────────────────
-# gradio 5.0.0 walks JSON Schemas and does `if "const" in schema:` without
+# ── Gradio boolean-schema safety patch ───────────────────────────────────────
+# Gradio <5.7 walks JSON Schemas and does `if "const" in schema:` without
 # guarding against boolean schemas (valid in JSON Schema spec but not a dict).
-# Patch every reachable schema-walking helper to skip non-dict schemas.
+# sdk_version is now >=5.25.0 (bug fixed upstream) but keep this as a guard.
 try:
     import gradio.utils as _gr_utils
     _orig_get_type = getattr(_gr_utils, "get_type", None)

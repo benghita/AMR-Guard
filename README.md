@@ -4,7 +4,7 @@ emoji: ⚕️
 colorFrom: blue
 colorTo: indigo
 sdk: gradio
-sdk_version: "5.0.0"
+sdk_version: "5.25.0"
 python_version: "3.11"
 pinned: true
 license: apache-2.0
